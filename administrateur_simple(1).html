@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Administration - Diplômes blockchain</title>
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.5/dist/ethers.umd.min.js"></script>
+<script src="config.js"></script>
+<style>
+body{margin:0;font-family:Arial,Helvetica,sans-serif;font-size:15px;background:#f4f4f4;color:#222}
+header{background:#1f3a5f;color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+header h1{margin:0;font-size:21px}
+header p{margin:2px 0 0;font-size:13px;color:#d6e0ee}
+.tabs{background:#fff;border-bottom:1px solid #ccc;padding:0 20px}
+.tabs button{background:none;border:0;border-bottom:3px solid transparent;padding:12px 14px;font-size:14px;cursor:pointer;color:#333}
+.tabs button.actif{border-bottom-color:#1f3a5f;font-weight:bold}
+main{max-width:1000px;margin:20px auto;padding:0 16px}
+.box{background:#fff;border:1px solid #ccc;border-radius:4px;padding:16px;margin-bottom:16px}
+.box h2{margin:0 0 10px;font-size:18px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.stat{background:#fff;border:1px solid #ccc;border-top:3px solid #1f3a5f;padding:12px}
+.stat .nb{font-size:26px;font-weight:bold}
+.stat .lib{font-size:13px;color:#555}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{border:1px solid #ddd;padding:8px;text-align:left;overflow-wrap:anywhere}
+th{background:#eef1f5}
+button.bouton{background:#1f3a5f;color:#fff;border:0;border-radius:3px;padding:8px 13px;font-size:14px;cursor:pointer;margin:8px 8px 0 0}
+button.rouge{background:#a32d2d}
+button.gris{background:#777}
+#connect{background:#fff;color:#1f3a5f;margin:0}
+.status{background:#fff;border:1px solid #ccc;border-left:4px solid #1f3a5f;padding:10px;margin-bottom:16px;overflow-wrap:anywhere}
+.status.ok{border-left-color:#1c7a3d;color:#1c7a3d}
+.status.err{border-left-color:#a32d2d;color:#a32d2d}
+.petit{font-size:13px;color:#555}
+.demande{border:1px solid #ddd;padding:10px;margin-bottom:8px;overflow-wrap:anywhere}
+.vert{color:#1c7a3d;font-weight:bold}
+.gris-txt{color:#666;font-weight:bold}
+.page[hidden]{display:none}
+.defil{overflow-x:auto}
+@media(max-width:800px){.stats{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Administration du réseau</h1>
+    <p>Certification des diplômes - réseau Sepolia</p>
+  </div>
+  <button class="bouton" id="connect">Connecter MetaMask (administrateur)</button>
+</header>
+
+<div class="tabs" id="onglets">
+  <button data-page="accueil" class="actif">Tableau de bord</button>
+  <button data-page="demandes" id="ongletDemandes">Demandes d'inscription</button>
+  <button data-page="universites">Universités autorisées</button>
+</div>
+
+<main>
+<div id="status" class="status">Non connecté. La lecture est publique ; la connexion de l'administrateur sert à valider les demandes.</div>
+
+<div class="page" id="p-accueil">
+  <div class="stats">
+    <div class="stat"><div class="nb" id="nUnis">-</div><div class="lib">Universités autorisées</div></div>
+    <div class="stat"><div class="nb" id="nAttente">-</div><div class="lib">Demandes en attente</div></div>
+    <div class="stat"><div class="nb" id="nDiplomes">-</div><div class="lib">Diplômes émis (réseau)</div></div>
+    <div class="stat"><div class="nb" id="nRole" style="font-size:18px">Non connecté</div><div class="lib">Statut du wallet</div></div>
+  </div>
+  <div class="box">
+    <h2>Demandes en attente</h2>
+    <div id="demandesAccueil"><p class="petit">Chargement...</p></div>
+  </div>
+  <div class="box">
+    <h2>Informations du contrat</h2>
+    <table id="infos"></table>
+  </div>
+</div>
+
+<div class="page" id="p-demandes" hidden>
+  <div class="box">
+    <h2>Demandes d'inscription</h2>
+    <p class="petit">Les demandes sont lues depuis les événements du contrat, par petits intervalles de blocs pour éviter les limites du RPC.</p>
+    <button class="bouton gris" id="actualiser" style="margin-top:0">Actualiser</button>
+    <div id="demandesTout" style="margin-top:10px"></div>
+  </div>
+</div>
+
+<div class="page" id="p-universites" hidden>
+  <div class="box">
+    <h2>Universités autorisées</h2>
+    <div class="defil" id="tableUnis"></div>
+  </div>
+</div>
+</main>
+
+<script>
+const ABI = [
+  "function administrateur() view returns(address)",
+  "function universiteAutorisee(address) view returns(bool)",
+  "function demandeEnAttente(address) view returns(bool)",
+  "function traiterDemande(address,bool)",
+  "function totalEmis(address) view returns(uint256)",
+  "function retirerUniversite(address)",
+  "event DemandeInscription(address indexed universite,string nom)",
+  "event UniversiteAjoutee(address indexed universite,string nom)"
+];
+const CFG = window.CONFIG || {};
+const ADDRESS = CFG.ADDRESS;
+const SEPOLIA = "0xaa36a7";
+const RPCS = [
+  "https://ethereum-sepolia-rpc.publicnode.com",
+  "https://1rpc.io/sepolia",
+  "https://sepolia.drpc.org"
+];
+let rpcIndex = 0;
+function attendre(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+function creerRpc(i) {
+  // batchMaxCount:1 = pas de requetes groupees (cause des erreurs 400 / coalesce)
+  return new ethers.JsonRpcProvider(RPCS[i], 11155111, { staticNetwork: true, batchMaxCount: 1 });
+}
+async function initLecteur(i) {
+  const rpc = creerRpc(i);
+  const code = await rpc.getCode(ADDRESS);
+  if (code === "0x") throw Error("Aucun contrat trouvé à cette adresse sur Sepolia. Vérifiez ADDRESS dans config.js.");
+  await rpc.getBlockNumber();
+  lecteur = new ethers.Contract(ADDRESS, ABI, rpc);
+  rpcIndex = i;
+}
+async function changerRpc() {
+  for (let k = 1; k <= RPCS.length; k++) {
+    const i = (rpcIndex + k) % RPCS.length;
+    try { await initLecteur(i); return; } catch (e) { /* essayer le suivant */ }
+  }
+  throw Error("Aucun RPC Sepolia ne répond. Réessayez plus tard.");
+}
+
+let provider, signer, contract, moi, lecteur;
+let adminAdresse = "";
+let estAdmin = false;
+let enAttente = [];
+let universites = [];
+
+function $(id) { return document.getElementById(id); }
+
+function message(texte, type) {
+  $("status").textContent = texte;
+  $("status").className = "status " + (type || "");
+}
+
+function erreur(e) { return e.shortMessage || e.reason || e.message || String(e); }
+
+function court(a) { return a.slice(0, 6) + "..." + a.slice(-4); }
+
+function creer(balise, classe, texte) {
+  const n = document.createElement(balise);
+  if (classe) n.className = classe;
+  if (texte !== undefined) n.textContent = texte;
+  return n;
+}
+
+function afficher(page) {
+  document.querySelectorAll(".page").forEach(function (p) { p.hidden = (p.id !== "p-" + page); });
+  document.querySelectorAll("#onglets button").forEach(function (b) {
+    b.className = (b.dataset.page === page) ? "actif" : "";
+  });
+}
+document.querySelectorAll("#onglets button").forEach(function (b) {
+  b.onclick = function () { afficher(b.dataset.page); };
+});
+
+async function connecter() {
+  if (!window.ethereum) throw Error("Installez MetaMask.");
+  if (!ADDRESS) throw Error("Adresse du contrat absente de config.js.");
+  const chaine = await ethereum.request({ method: "eth_chainId" });
+  if (chaine !== SEPOLIA) {
+    try {
+      await ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: SEPOLIA }] });
+    } catch (e) {
+      throw Error("Sélectionnez Sepolia dans MetaMask.");
+    }
+  }
+  provider = new ethers.BrowserProvider(window.ethereum);
+  signer = await provider.getSigner();
+  moi = await signer.getAddress();
+  if ((await provider.getCode(ADDRESS)) === "0x") throw Error("Aucun contrat à cette adresse sur Sepolia. Vérifiez config.js.");
+  contract = new ethers.Contract(ADDRESS, ABI, signer);
+}
+
+async function verifierAdmin() {
+  if (!contract) await connecter();
+  const a = await contract.administrateur();
+  if (a.toLowerCase() !== moi.toLowerCase()) throw Error("Ce wallet n'est pas l'administrateur du contrat. Administrateur attendu : " + a);
+  estAdmin = true;
+}
+
+async function lireEvenements(filtre, debut, fin) {
+  const tous = [];
+  let pas = 2000, d = debut, echecs = 0, changements = 0;
+  while (d <= fin) {
+    const f = Math.min(d + pas - 1, fin);
+    try {
+      tous.push(...(await lecteur.queryFilter(filtre, d, f)));
+      d = f + 1;
+      echecs = 0;
+    } catch (e) {
+      echecs++;
+      if (pas > 10) {
+        pas = Math.max(10, Math.floor(pas / 2));   // plage trop grande : on réduit
+      } else if (echecs > 3) {
+        if (++changements > RPCS.length * 2) throw e;
+        await changerRpc();                         // on change de RPC
+        echecs = 0;
+        pas = 500;
+      }
+      await attendre(300);
+    }
+  }
+  return tous;
+}
+
+function afficherDemandes(boite, liste, max) {
+  boite.replaceChildren();
+  if (liste.length === 0) {
+    boite.append(creer("p", "petit", "Aucune demande en attente."));
+    return;
+  }
+  liste.slice(0, max).forEach(function (u) {
+    const d = creer("div", "demande");
+    d.append(creer("b", "", u.nom), creer("br"), creer("span", "petit", u.adresse), creer("br"));
+    const ok = creer("button", "bouton", "Autoriser");
+    ok.onclick = function () { agir(function () { return contract.traiterDemande(u.adresse, true); }, u.nom + " autorisée."); };
+    const non = creer("button", "bouton rouge", "Refuser");
+    non.onclick = function () { agir(function () { return contract.traiterDemande(u.adresse, false); }, "Demande refusée."); };
+    d.append(ok, non);
+    boite.append(d);
+  });
+}
+
+function afficherUniversites() {
+  const boite = $("tableUnis");
+  boite.replaceChildren();
+  if (universites.length === 0) {
+    boite.append(creer("p", "petit", "Aucune université trouvée."));
+    return;
+  }
+  const t = creer("table");
+  const tete = creer("tr");
+  ["Université", "Wallet", "Statut", "Diplômes", "Action"].forEach(function (x) { tete.append(creer("th", "", x)); });
+  t.append(tete);
+  universites.forEach(function (u) {
+    const l = creer("tr");
+    l.append(creer("td", "", u.nom), creer("td", "", u.adresse));
+    const st = creer("td");
+    st.append(u.autorisee ? creer("span", "vert", "Autorisée") : creer("span", "gris-txt", "Retirée"));
+    l.append(st, creer("td", "", String(u.total)));
+    const act = creer("td");
+    if (u.autorisee) {
+      const b = creer("button", "bouton rouge", "Retirer");
+      b.onclick = function () {
+        if (confirm("Retirer l'autorisation de " + u.nom + " ?")) {
+          agir(function () { return contract.retirerUniversite(u.adresse); }, "Autorisation retirée.");
+        }
+      };
+      act.append(b);
+    }
+    l.append(act);
+    t.append(l);
+  });
+  boite.append(t);
+}
+
+function afficherTout() {
+  const nb = enAttente.length;
+  $("nUnis").textContent = universites.filter(function (u) { return u.autorisee; }).length;
+  $("nAttente").textContent = nb;
+  $("nDiplomes").textContent = universites.reduce(function (s, u) { return s + u.total; }, 0);
+  $("ongletDemandes").textContent = "Demandes d'inscription" + (nb ? " (" + nb + ")" : "");
+  $("nRole").textContent = estAdmin ? "Administrateur" : (moi ? "Non administrateur" : "Lecture seule");
+  afficherDemandes($("demandesAccueil"), enAttente, 3);
+  afficherDemandes($("demandesTout"), enAttente, 200);
+  afficherUniversites();
+  const t = $("infos");
+  t.replaceChildren();
+  [["Contrat", ADDRESS || "-"], ["Administrateur", adminAdresse || "-"], ["Réseau", "Ethereum Sepolia"]].forEach(function (c) {
+    const l = creer("tr");
+    l.append(creer("th", "", c[0]), creer("td", "", c[1]));
+    t.append(l);
+  });
+}
+
+async function charger() {
+  try {
+    if (!ADDRESS) throw Error("Adresse du contrat absente de config.js.");
+    if (!ethers.isAddress(ADDRESS)) throw Error("Adresse du contrat invalide dans config.js.");
+    if (!lecteur) {
+      let derniereErreur;
+      for (let i = 0; i < RPCS.length; i++) {
+        try { await initLecteur(i); derniereErreur = null; break; } catch (e) { derniereErreur = e; }
+      }
+      if (derniereErreur) throw derniereErreur;
+    }
+    message("Lecture des événements du contrat...");
+    const dernier = await lecteur.runner.getBlockNumber();
+    const debut = Number(CFG.DEPLOY_BLOCK);
+    if (!Number.isSafeInteger(debut) || debut < 0) throw Error("DEPLOY_BLOCK est absent ou invalide dans config.js.");
+    if (debut > dernier) throw Error("DEPLOY_BLOCK est supérieur au bloc actuel. Vérifiez config.js.");
+    adminAdresse = await lecteur.administrateur();
+
+    const demandes = await lireEvenements(lecteur.filters.DemandeInscription(), debut, dernier);
+    const ajoutees = await lireEvenements(lecteur.filters.UniversiteAjoutee(), debut, dernier);
+
+    // on garde la dernière demande de chaque adresse
+    const dernieresDemandes = new Map();
+    demandes.forEach(function (e) {
+      dernieresDemandes.set(e.args.universite.toLowerCase(), { adresse: e.args.universite, nom: e.args.nom });
+    });
+    const listeAjoutees = new Map();
+    ajoutees.forEach(function (e) {
+      listeAjoutees.set(e.args.universite.toLowerCase(), { adresse: e.args.universite, nom: e.args.nom });
+    });
+
+    enAttente = [];
+    for (const u of dernieresDemandes.values()) {
+      if (await lecteur.demandeEnAttente(u.adresse)) enAttente.push(u);
+    }
+    universites = [];
+    for (const u of listeAjoutees.values()) {
+      const autorisee = await lecteur.universiteAutorisee(u.adresse);
+      const total = await lecteur.totalEmis(u.adresse);
+      universites.push({ adresse: u.adresse, nom: u.nom, autorisee: autorisee, total: Number(total) });
+    }
+    afficherTout();
+    message("Lecture terminée. Bloc actuel : " + dernier, "ok");
+  } catch (e) {
+    message("Erreur de lecture : " + erreur(e) + ". Vérifiez ADDRESS et DEPLOY_BLOCK dans config.js, puis réessayez. Si le RPC limite les événements, changez de RPC Sepolia.", "err");
+  }
+}
+
+async function agir(action, texteOk) {
+  try {
+    await verifierAdmin();
+    message("Confirmez la transaction dans MetaMask...");
+    const tx = await action();
+    message("Transaction envoyée : " + tx.hash);
+    await tx.wait();
+    message(texteOk + " Transaction confirmée.", "ok");
+    await charger();
+  } catch (e) { message(erreur(e), "err"); }
+}
+
+$("connect").onclick = async function () {
+  try {
+    await verifierAdmin();
+    $("connect").textContent = court(moi) + " (administrateur)";
+    message("Connecté comme administrateur : " + moi, "ok");
+    await charger();
+  } catch (e) { message(erreur(e), "err"); }
+};
+$("actualiser").onclick = charger;
+
+if (window.ethereum) {
+  ethereum.on("accountsChanged", function () { location.reload(); });
+  ethereum.on("chainChanged", function () { location.reload(); });
+}
+charger();
+</script>
+</body>
+</html>

@@ -1,0 +1,875 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Espace université - Diplômes blockchain</title>
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.5/dist/ethers.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="config.js"></script>
+<style>
+body{margin:0;font-family:Arial,Helvetica,sans-serif;font-size:15px;background:#f4f4f4;color:#222}
+header{background:#1f3a5f;color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+header h1{margin:0;font-size:21px}
+header p{margin:2px 0 0;font-size:13px;color:#d6e0ee}
+.tabs{background:#fff;border-bottom:1px solid #ccc;padding:0 20px}
+.tabs button{background:none;border:0;border-bottom:3px solid transparent;padding:12px 14px;font-size:14px;cursor:pointer;color:#333}
+.tabs button.actif{border-bottom-color:#1f3a5f;font-weight:bold}
+main{max-width:1000px;margin:20px auto;padding:0 16px}
+.box{background:#fff;border:1px solid #ccc;border-radius:4px;padding:16px;margin-bottom:16px}
+.box h2{margin:0 0 10px;font-size:18px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.stat{background:#fff;border:1px solid #ccc;border-top:3px solid #1f3a5f;padding:12px}
+.stat .nb{font-size:26px;font-weight:bold}
+.stat .lib{font-size:13px;color:#555}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{border:1px solid #ddd;padding:8px;text-align:left;overflow-wrap:anywhere}
+th{background:#eef1f5}
+label{display:block;margin:10px 0 4px;font-size:14px;font-weight:bold}
+input[type=text],input[type=file]{width:100%;box-sizing:border-box;padding:8px;border:1px solid #aaa;border-radius:3px;font-size:14px}
+.file-drop{border:1px dashed #8a99aa;border-radius:3px;padding:12px;background:#fafbfd;text-align:center;margin-top:4px}
+.file-drop.dragover{background:#eef1f5;border-color:#1f3a5f}
+.file-drop p{margin:0 0 8px;font-size:13px;color:#555}
+.file-drop input[type=file]{background:#fff}
+button.bouton{background:#1f3a5f;color:#fff;border:0;border-radius:3px;padding:9px 14px;font-size:14px;cursor:pointer;margin:10px 8px 0 0}
+button.bouton:disabled{opacity:.5}
+button.rouge{background:#a32d2d}
+button.gris{background:#777}
+#connect{background:#fff;color:#1f3a5f;margin:0}
+.status{background:#fff;border:1px solid #ccc;border-left:4px solid #1f3a5f;padding:10px;margin-bottom:16px;overflow-wrap:anywhere}
+.status.ok{border-left-color:#1c7a3d;color:#1c7a3d}
+.status.err{border-left-color:#a32d2d;color:#a32d2d}
+.ligne{border:1px solid #ddd;padding:8px;margin-bottom:6px;font-size:13px;overflow-wrap:anywhere}
+.deux{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.vert{color:#1c7a3d;font-weight:bold}
+.rouge-txt{color:#a32d2d;font-weight:bold}
+.page[hidden]{display:none}
+.defil{overflow-x:auto}
+@media(max-width:800px){.stats{grid-template-columns:1fr 1fr}.deux{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Diplômes Blockchain</h1>
+    <p>Espace de gestion de l'université - réseau Sepolia</p>
+  </div>
+  <button class="bouton" id="connect">Connecter MetaMask</button>
+</header>
+
+<div class="tabs" id="onglets">
+  <button data-page="accueil" class="actif">Tableau de bord</button>
+  <button data-page="emettre">Émettre / Révoquer</button>
+  <button data-page="liste">Mes diplômes</button>
+  <button data-page="historique">Historique</button>
+  <button data-page="inscription">Inscription</button>
+</div>
+
+<main>
+<div id="status" class="status">Connectez MetaMask pour commencer.</div>
+
+<div class="page" id="p-verification" hidden>
+  <div class="box">
+    <h2>Résultat de la vérification publique</h2>
+    <div id="verificationResult" class="status">Vérification du diplôme en cours...</div>
+    <h3 id="verificationTitre" style="margin-top:20px">Informations du diplôme</h3>
+    <table id="verificationDetails"></table>
+  </div>
+</div>
+
+<div class="page" id="p-accueil">
+  <div class="stats">
+    <div class="stat"><div class="nb" id="nEmis">-</div><div class="lib">Diplômes émis</div></div>
+    <div class="stat"><div class="nb" id="nActifs">-</div><div class="lib">Diplômes valides</div></div>
+    <div class="stat"><div class="nb" id="nRevoques">-</div><div class="lib">Diplômes révoqués</div></div>
+    <div class="stat"><div class="nb" id="nStatut" style="font-size:18px">Non connecté</div><div class="lib">Statut du wallet</div></div>
+  </div>
+  <div class="box">
+    <h2>Informations de l'université</h2>
+    <table id="infos"></table>
+  </div>
+</div>
+
+<div class="page" id="p-emettre" hidden>
+  <div class="deux">
+    <div class="box">
+      <h2>Émettre un diplôme depuis le PDF officiel</h2>
+      <label for="pdfOfficiel">Diplôme officiel au format PDF</label>
+      <input type="file" id="pdfOfficiel" accept="application/pdf,.pdf">
+      <p class="petit" id="extractionStatus">Les informations seront extraites automatiquement dès la sélection du PDF.</p>
+      <label for="pdfNomEtudiant">Nom de l'étudiant </label>
+      <input type="text" id="pdfNomEtudiant" placeholder="Nom complet">
+      <label for="pdfIntitule">Intitulé du diplôme </label>
+      <input type="text" id="pdfIntitule" placeholder="LICENCE, MASTER, etc.">
+      <button class="bouton" id="emettrePDF">Émettre ce PDF officiel avec QR code</button>
+    </div>
+    <div class="box">
+      <h2>Révoquer un diplôme</h2>
+      <label for="pdfRevocation">PDF du diplôme à révoquer</label>
+      <div class="file-drop" id="pdfRevocationDrop" tabindex="0" role="button" aria-label="Déposer ou choisir le PDF à révoquer">
+        <p>Glissez-déposez le PDF ici</p>
+        <p class="petit">ou choisissez un fichier ci-dessous</p>
+        <input type="file" id="pdfRevocation" accept="application/pdf,.pdf">
+        <div class="petit" id="pdfRevocationStatus">Aucun PDF sélectionné.</div>
+      </div>
+      <label for="empreinteRev">Empreinte SHA-256 détectée</label>
+      <input type="text" id="empreinteRev" placeholder="L'empreinte apparaîtra après sélection du PDF" maxlength="66" readonly>
+      <label for="motif">Motif de révocation</label>
+      <input type="text" id="motif" maxlength="140" placeholder="Indiquez le motif de révocation">
+      <button class="bouton rouge" id="revoquer" disabled>Révoquer le diplôme</button>
+    </div>
+  </div>
+</div>
+
+<div class="page" id="p-liste" hidden>
+  <div class="box">
+    <h2>Mes diplômes</h2>
+    <button class="bouton gris" id="actualiser" disabled style="margin-top:0">Actualiser</button>
+    <div class="defil" id="tous" style="margin-top:10px"></div>
+  </div>
+</div>
+
+<div class="page" id="p-historique" hidden>
+  <div class="box">
+    <h2>Historique des opérations</h2>
+    <p class="petit" id="infoHisto">En attente de connexion.</p>
+    <div id="historique"></div>
+  </div>
+</div>
+
+<div class="page" id="p-inscription" hidden>
+  <div class="box">
+    <h2>Demande d'inscription</h2>
+    <p class="petit">Le wallet doit être autorisé par l'administrateur pour émettre ou révoquer des diplômes.</p>
+    <label for="nom">Nom de l'université</label>
+    <input type="text" id="nom" maxlength="80">
+    <button class="bouton" id="demander">Envoyer la demande d'inscription</button>
+  </div>
+</div>
+</main>
+
+<script>
+const ABI = [
+  "function administrateur() view returns(address)",
+  "function universiteAutorisee(address) view returns(bool)",
+  "function nomUniversite(address) view returns(string)",
+  "function demandeEnAttente(address) view returns(bool)",
+  "function demanderInscription(string)",
+  "function totalEmis(address) view returns(uint256)",
+  "function emettreDiplome(bytes32)",
+  "function revoquerDiplome(bytes32,string)",
+  "function verifierDiplome(address,bytes32) view returns(bool,bool,uint64,uint64)",
+  "event DiplomeEmis(address indexed universite,bytes32 indexed empreinte,uint64 date)",
+  "event DiplomeRevoque(address indexed universite,bytes32 indexed empreinte,uint64 date,string motif)"
+];
+const ADDRESS = window.CONFIG && window.CONFIG.ADDRESS;
+const DEPLOY_BLOCK = window.CONFIG && window.CONFIG.DEPLOY_BLOCK;
+const SEPOLIA = "0xaa36a7";
+
+let provider, signer, contract, moi;
+let infoUni = { nom: "", autorisee: false, attente: false };
+let derniereMetaPDF = {};
+
+function $(id) { return document.getElementById(id); }
+
+function message(texte, type) {
+  $("status").textContent = texte;
+  $("status").className = "status " + (type || "");
+}
+
+function erreur(e) {
+  return e.shortMessage || e.reason || e.message || String(e);
+}
+
+function court(a) { return a.slice(0, 6) + "..." + a.slice(-4); }
+
+function dateFr(t) { return new Date(Number(t) * 1000).toLocaleDateString("fr-FR"); }
+
+function creer(balise, classe, texte) {
+  const n = document.createElement(balise);
+  if (classe) n.className = classe;
+  if (texte !== undefined) n.textContent = texte;
+  return n;
+}
+
+// Onglets
+function afficher(page) {
+  document.querySelectorAll(".page").forEach(function (p) { p.hidden = (p.id !== "p-" + page); });
+  document.querySelectorAll("#onglets button").forEach(function (b) {
+    b.className = (b.dataset.page === page) ? "actif" : "";
+  });
+}
+document.querySelectorAll("#onglets button").forEach(function (b) {
+  b.onclick = function () { afficher(b.dataset.page); };
+});
+
+// Données locales (nom de l'étudiant et diplôme, gardés dans ce navigateur)
+function cleMeta() { return "meta:" + ADDRESS + ":" + moi; }
+function lireMeta() {
+  try { return JSON.parse(localStorage.getItem(cleMeta()) || "{}"); } catch (e) { return {}; }
+}
+function ecrireMeta(hash, valeur) {
+  const m = lireMeta();
+  m[hash] = valeur;
+  try { localStorage.setItem(cleMeta(), JSON.stringify(m)); } catch (e) {}
+}
+
+async function connecter() {
+  if (!window.ethereum) throw Error("MetaMask n'est pas installé.");
+  if (!ADDRESS || !ethers.isAddress(ADDRESS)) throw Error("Adresse du contrat absente ou invalide dans config.js.");
+  const chaine = await ethereum.request({ method: "eth_chainId" });
+  if (chaine !== SEPOLIA) {
+    try {
+      await ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: SEPOLIA }] });
+    } catch (e) {
+      throw Error("Sélectionnez le réseau Sepolia dans MetaMask.");
+    }
+  }
+  provider = new ethers.BrowserProvider(window.ethereum);
+  signer = await provider.getSigner();
+  moi = await signer.getAddress();
+  if ((await provider.getCode(ADDRESS)) === "0x") throw Error("Aucun contrat trouvé à cette adresse sur Sepolia. Vérifiez config.js.");
+  contract = new ethers.Contract(ADDRESS, ABI, signer);
+  $("connect").textContent = court(moi) + " (connecté)";
+  $("actualiser").disabled = false;
+}
+
+async function hashFichierFichier(f) {
+  if (!f) throw Error("Choisissez au moins un fichier PDF.");
+  if (f.type !== "application/pdf" && !f.name.toLowerCase().endsWith(".pdf")) {
+    throw Error("Le fichier « " + f.name + " » n'est pas un PDF.");
+  }
+  return ethers.sha256(new Uint8Array(await f.arrayBuffer()));
+}
+
+async function hashFichier(id) {
+  const f = $(id).files[0];
+  return hashFichierFichier(f);
+}
+
+// La bibliothèque QR limite la longueur des données (213 caractères en niveau M, 271 en niveau L)
+function creerQR(element, texte, taille) {
+  const niveaux = [QRCode.CorrectLevel.M, QRCode.CorrectLevel.L];
+  for (let i = 0; i < niveaux.length; i++) {
+    element.replaceChildren();
+    try {
+      new QRCode(element, { text: texte, width: taille, height: taille, correctLevel: niveaux[i] });
+      return;
+    } catch (e) { /* données trop longues pour ce niveau : on essaie le suivant */ }
+  }
+  element.replaceChildren();
+  throw Error("Adresse de vérification trop longue pour un QR code (" + texte.length + " caractères). Raccourcissez le nom du fichier ou le nom de domaine de l'application.");
+}
+
+function creerURLVerification(universite, empreinte, meta = {}) {
+  if (!universite || !empreinte) return "";
+  if (window.location.protocol === "file:" || ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname)) return "";
+  const url = new URL(window.location.href);
+  url.search = "";
+  url.hash = "";
+  url.searchParams.set("v", "1");
+  url.searchParams.set("u", universite);
+  url.searchParams.set("e", empreinte);
+  const champs = { nom: meta.etu || meta.nom || "", diplome: meta.dip || meta.intitule || "", etablissement: meta.etablissement || "", specialite: meta.specialite || "", mention: meta.mention || "", date: meta.dateDelivrance || meta.date || "", reference: meta.reference || "" };
+  Object.entries(champs).forEach(([cle, valeur]) => { if (valeur) url.searchParams.set(cle, String(valeur)); });
+  return url.toString();
+}
+
+// Génère une page de diplôme à partir des données JSON.
+async function creerPDFDiplome(meta) {
+  if (!window.PDFLib) throw Error("La bibliothèque PDF n'est pas chargée. Vérifiez votre connexion Internet.");
+  const { PDFDocument, StandardFonts, rgb } = PDFLib;
+  const pdfDoc = await PDFDocument.create();
+  const page = pdfDoc.addPage([841.89, 595.28]); // A4 paysage
+  const regular = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const w = page.getWidth(), h = page.getHeight();
+  const bleu = rgb(0.12, 0.23, 0.37), gris = rgb(0.25, 0.25, 0.25), or = rgb(0.70, 0.53, 0.20);
+  page.drawRectangle({ x: 24, y: 24, width: w - 48, height: h - 48, borderColor: bleu, borderWidth: 2 });
+  page.drawRectangle({ x: 32, y: 32, width: w - 64, height: h - 64, borderColor: or, borderWidth: 0.8 });
+  // La police standard n'accepte que l'alphabet latin (WinAnsi) : les autres caractères sont remplacés
+  const WIN = /[\u0020-\u007E\u00A0-\u00FF\u0152\u0153\u0160\u0161\u0178\u017D\u017E\u0192\u02C6\u02DC\u2013\u2014\u2018\u2019\u201A\u201C\u201D\u201E\u2020\u2021\u2022\u2026\u2030\u2039\u203A\u20AC\u2122]/;
+  const propre = function (t) {
+    return Array.from(String(t).replace(/\s+/g, " ")).map(function (c) {
+      if (WIN.test(c)) return c;
+      const sans = c.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      return sans.length === 1 && WIN.test(sans) ? sans : "?";
+    }).join("");
+  };
+  const centre = (txt, y, size, font, color=gris) => {
+    let tw = font.widthOfTextAtSize(txt, size);
+    while (tw > w - 96 && size > 7) { size -= 0.5; tw = font.widthOfTextAtSize(txt, size); }
+    page.drawText(txt, { x: Math.max(48, (w - tw) / 2), y, size, font, color });
+  };
+  const uni = propre(meta.etablissement || "Université de démonstration").slice(0, 100);
+  const nom = propre(meta.etu || "Nom non renseigné").slice(0, 100);
+  const diplome = propre(meta.dip || "Diplôme").slice(0, 100);
+  const specialite = propre(meta.specialite || "").slice(0, 120);
+  const mention = propre(meta.mention || "").slice(0, 60);
+  const date = propre(meta.dateDelivrance || new Date().toISOString().slice(0,10));
+  const reference = propre(meta.reference || "DIP-" + new Date().getFullYear() + "-" + Math.random().toString(10).slice(2,8)).slice(0, 60);
+  const serie = propre(meta.numeroSerie || "").slice(0, 80);
+  centre(uni.toLocaleUpperCase("fr-FR"), 510, 19, bold, bleu);
+  centre("DIPLÔME UNIVERSITAIRE", 450, 24, bold, bleu);
+  centre("Il est certifié que", 405, 13, regular, gris);
+  centre(nom, 365, 25, bold, bleu);
+  centre("a obtenu le diplôme de " + diplome, 325, 15, regular, gris);
+  if (specialite) centre("Spécialité : " + specialite, 298, 13, regular, gris);
+  if (mention) centre("Mention : " + mention, 273, 13, regular, gris);
+  centre("Délivré le : " + date, 230, 12, regular, gris);
+  centre("Référence : " + reference, 204, 11, regular, gris);
+  if (serie) centre("Numéro de série : " + serie, 184, 10, regular, gris);
+  page.drawText("Le Président de l'Université", { x: w - 320, y: 140, size: 11, font: bold, color: bleu });
+  page.drawText("Document généré par le système de certification blockchain", { x: 52, y: 55, size: 8, font: regular, color: gris });
+  return { pdfDoc, meta: { ...meta, reference: reference, dateDelivrance: date } };
+}
+
+// Intègre le QR code en haut à droite, avec une marge blanche autour.
+async function genererPDFAvecQR(pdfDoc, meta, empreinte, universite, txHash) {
+  if (!window.QRCode) throw Error("La bibliothèque QR code n'est pas chargée. Vérifiez la connexion Internet.");
+  const urlVerification = creerURLVerification(universite, empreinte, meta);
+  if (!urlVerification) throw Error("Impossible de construire l'URL publique de vérification. Hébergez l'application sur une URL accessible.");
+  const zone = document.createElement("div");
+  zone.style.position = "fixed"; zone.style.left = "-10000px"; zone.style.top = "0";
+  document.body.appendChild(zone);
+  try {
+    creerQR(zone, urlVerification, 220);
+    const canvas = zone.querySelector("canvas");
+    const image = zone.querySelector("img");
+    const dataUrl = canvas ? canvas.toDataURL("image/png") : (image ? image.src : "");
+    if (!dataUrl) throw Error("Le QR code n'a pas pu être généré.");
+    const { StandardFonts, rgb } = PDFLib;
+    // pdf-lib garde en cache le contenu de la page après un premier save() (fait pour calculer l'empreinte) :
+    // ce qu'on dessinerait ensuite serait perdu. On repart donc d'une copie rechargée du diplôme.
+    const doc = await PDFLib.PDFDocument.load(await pdfDoc.save());
+    const page = doc.getPages()[0];
+    const regular = await doc.embedFont(StandardFonts.Helvetica);
+    const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+    const qrImage = await doc.embedPng(dataUrl);
+    const w = page.getWidth(), h = page.getHeight();
+    const qrSize = 84, marge = 8;
+    const qrX = w - qrSize - 34;
+    const qrY = h - qrSize - 34;
+    // Fond blanc et marge de sécurité autour du QR pour préserver sa lisibilité.
+    page.drawRectangle({ x: qrX - marge, y: qrY - marge - 13, width: qrSize + 2*marge, height: qrSize + 2*marge + 17, color: rgb(1,1,1), borderColor: rgb(0.82,0.85,0.88), borderWidth: 0.7 });
+    page.drawImage(qrImage, { x: qrX, y: qrY, width: qrSize, height: qrSize });
+    page.drawText("Vérification blockchain", {
+      x: qrX - 5, y: qrY - 17, size: 6.5, font: bold,
+      color: rgb(0.12, 0.23, 0.37), maxWidth: qrSize + 10
+    });
+    // La référence de transaction reste disponible dans l'historique de l'application.
+    const bytes = await doc.save();
+    const blob = new Blob([bytes], { type: "application/pdf" });
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const base = String(meta.reference || meta.etu || "diplome").replace(/[^a-zA-Z0-9_-]+/g, "_");
+    a.href = objectUrl; a.download = base + "_avec_QR_code.pdf";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 30000);
+  } finally { zone.remove(); }
+}
+// Insère le QR sur une copie du PDF officiel importé, sans créer une annexe.
+async function telechargerPDFOfficielAvecQR(bytesOriginaux, nomFichier, empreinte, universite) {
+  if (!window.PDFLib || !window.QRCode) throw Error("Les bibliothèques PDF/QR ne sont pas chargées. Vérifiez la connexion Internet.");
+  const metaQR = {
+    etu: $("pdfNomEtudiant").value.trim(),
+    dip: $("pdfIntitule").value.trim(),
+    etablissement: infoUni.nom || derniereMetaPDF.etablissement || "Université",
+    specialite: derniereMetaPDF.specialite || "",
+    mention: derniereMetaPDF.mention || "",
+    dateDelivrance: derniereMetaPDF.dateDelivrance || new Date().toLocaleDateString("fr-FR"),
+    reference: derniereMetaPDF.reference || ((nomFichier.match(/DIP-\d{4}-\d+/i) || [nomFichier])[0])
+  };
+  const urlVerification = creerURLVerification(universite, empreinte, metaQR);
+  if (!urlVerification) throw Error("Impossible de construire l'URL de vérification. Hébergez l'application sur une URL accessible.");
+  const zone = document.createElement("div");
+  zone.style.position = "fixed"; zone.style.left = "-10000px"; zone.style.top = "0";
+  document.body.appendChild(zone);
+  try {
+    creerQR(zone, urlVerification, 220);
+    const canvas = zone.querySelector("canvas");
+    const img = zone.querySelector("img");
+    const dataUrl = canvas ? canvas.toDataURL("image/png") : (img ? img.src : "");
+    if (!dataUrl) throw Error("Impossible de générer le QR code.");
+    const { PDFDocument, StandardFonts, rgb } = PDFLib;
+    const doc = await PDFDocument.load(bytesOriginaux);
+    const page = doc.getPages()[0];
+    if (!page) throw Error("Le PDF ne contient aucune page.");
+    const qrImage = await doc.embedPng(dataUrl);
+    const font = await doc.embedFont(StandardFonts.HelveticaBold);
+    const size = page.getSize(), qrSize = Math.min(84, size.width * 0.16, size.height * 0.22), marge = 8;
+    const x = size.width - qrSize - 26, y = size.height - qrSize - 28;
+    page.drawRectangle({ x: x - marge, y: y - marge - 13, width: qrSize + 2*marge, height: qrSize + 2*marge + 17, color: rgb(1,1,1), borderColor: rgb(0.82,0.85,0.88), borderWidth: 0.7 });
+    page.drawImage(qrImage, { x, y, width: qrSize, height: qrSize });
+    page.drawText("Vérification blockchain", { x: x - 5, y: Math.max(4, y - 17), size: 6.5, font, color: rgb(0.12,0.23,0.37) });
+    const blob = new Blob([await doc.save()], {type:"application/pdf"});
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objectUrl;
+    a.download = (nomFichier.replace(/\.pdf$/i, "") || "diplome") + "_avec_QR_code.pdf";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 30000);
+  } finally { zone.remove(); }
+}
+
+function ajouterLigneVerification(libelle, valeur) {
+  const tr = creer("tr");
+  tr.append(creer("th", "", libelle), creer("td", "", valeur));
+  $("verificationDetails").append(tr);
+}
+
+async function lancerVerificationPublique() {
+  const params = new URLSearchParams(window.location.search);
+  const universite = params.get("universite") || params.get("u");
+  const empreinte = params.get("empreinte") || params.get("e");
+  const dateBrute = params.get("date") || "";
+  const dateAffichee = /^\d{4}-\d{2}-\d{2}$/.test(dateBrute)
+    ? dateBrute.slice(8,10) + "/" + dateBrute.slice(5,7) + "/" + dateBrute.slice(0,4)
+    : dateBrute;
+  const donnees = [
+    ["Étudiant", params.get("nom") || ""],
+    ["Diplôme", params.get("diplome") || ""],
+    ["Spécialité", params.get("specialite") || ""],
+    ["Référence", params.get("reference") || ""],
+    ["Date de délivrance", dateAffichee]
+  ];
+  $("onglets").hidden = true;
+  $("connect").hidden = true;
+  $("status").hidden = true;
+  document.querySelectorAll(".page").forEach(function (p) { p.hidden = p.id !== "p-verification"; });
+  const resultat = $("verificationResult");
+  $("verificationDetails").replaceChildren();
+  donnees.forEach(([libelle, valeur]) => { if (valeur) ajouterLigneVerification(libelle, valeur); });
+  try {
+    if (!ADDRESS) throw Error("La vérification est temporairement indisponible.");
+    if (!universite || !ethers.isAddress(universite)) throw Error("Le QR code ne contient pas une référence de vérification valide.");
+    if (!empreinte || !/^0x[0-9a-fA-F]{64}$/.test(empreinte)) throw Error("Le QR code ne contient pas une référence de diplôme valide.");
+    const rpcUrl = (window.CONFIG && window.CONFIG.RPC_URL) || "https://ethereum-sepolia-rpc.publicnode.com";
+    const lectureProvider = new ethers.JsonRpcProvider(rpcUrl);
+    const contratLecture = new ethers.Contract(ADDRESS, ABI, lectureProvider);
+    const r = await contratLecture.verifierDiplome(universite, empreinte);
+    const existe = Boolean(r[0]), revoque = Boolean(r[1]);
+    if (!existe) {
+      resultat.className = "status err";
+      resultat.textContent = "DIPLÔME NON AUTHENTIQUE — aucune certification valide n'a été retrouvée pour ce document.";
+    } else if (revoque) {
+      resultat.className = "status err";
+      resultat.textContent = "DIPLÔME RÉVOQUÉ — cette certification n'est plus valide.";
+    } else {
+      resultat.className = "status ok";
+      resultat.textContent = "DIPLÔME AUTHENTIQUE — les informations correspondent à une certification active.";
+    }
+  } catch (e) {
+    resultat.className = "status err";
+    resultat.textContent = "Vérification impossible pour le moment. Réessayez lorsque le service sera accessible.";
+  }
+}
+
+// Lecture des événements par petits blocs pour ne pas dépasser la limite du RPC
+async function lireEvenements(filtre, debut, fin) {
+  const tous = [];
+  for (let d = debut; d <= fin; d += 1500) {
+    const f = Math.min(d + 1499, fin);
+    const logs = await contract.queryFilter(filtre, d, f);
+    tous.push(...logs);
+  }
+  return tous;
+}
+
+function tableauDiplomes(liste) {
+  if (liste.length === 0) return creer("p", "petit", "Aucun diplôme trouvé pour ce wallet.");
+  const t = creer("table");
+  const tete = creer("tr");
+  ["N°", "Étudiant", "Diplôme", "Date d'émission", "Statut"].forEach(function (x) {
+    tete.append(creer("th", "", x));
+  });
+  t.append(tete);
+  liste.forEach(function (d) {
+    const l = creer("tr");
+    l.append(creer("td", "", d.id), creer("td", "", d.etu || "-"), creer("td", "", d.dip || "-"), creer("td", "", dateFr(d.date)));
+    const st = creer("td");
+    st.append(d.revoque ? creer("span", "rouge-txt", "Révoqué") : creer("span", "vert", "Valide"));
+    l.append(st);
+    t.append(l);
+  });
+  return t;
+}
+
+function afficherInfos() {
+  const t = $("infos");
+  t.replaceChildren();
+  const statut = infoUni.autorisee ? "Autorisée" : (infoUni.attente ? "Demande en attente" : "Non autorisée");
+  [["Université", infoUni.nom || "-"], ["Wallet", moi || "-"], ["Statut", statut]].forEach(function (c) {
+    const l = creer("tr");
+    l.append(creer("th", "", c[0]), creer("td", "", c[1]));
+    t.append(l);
+  });
+}
+
+async function actualiser() {
+  if (!contract) await connecter();
+  message("Lecture des données sur la blockchain...");
+  $("infoHisto").textContent = "Chargement...";
+  try {
+    const r = await Promise.all([
+      contract.universiteAutorisee(moi),
+      contract.demandeEnAttente(moi).catch(function () { return false; }),
+      contract.totalEmis(moi),
+      provider.getBlockNumber()
+    ]);
+    const autorisee = r[0], attente = r[1], total = r[2], dernier = r[3];
+    infoUni = { nom: autorisee ? await contract.nomUniversite(moi) : "", autorisee: autorisee, attente: attente };
+
+    let debut = Number(DEPLOY_BLOCK || 0);
+    if (!Number.isFinite(debut) || debut < 0) debut = 0;
+    if (debut > dernier) throw Error("DEPLOY_BLOCK est supérieur au bloc actuel. Corrigez config.js.");
+    if (debut === 0) throw Error("DEPLOY_BLOCK vaut 0 : renseignez dans config.js le numéro du bloc de déploiement du contrat (visible sur Etherscan).");
+
+    const emis = await lireEvenements(contract.filters.DiplomeEmis(moi), debut, dernier);
+    const revoques = await lireEvenements(contract.filters.DiplomeRevoque(moi), debut, dernier);
+
+    const meta = lireMeta();
+    const setRevoques = new Set(revoques.map(function (e) { return e.args.empreinte; }));
+    emis.sort(function (a, b) { return a.blockNumber - b.blockNumber; });
+    const diplomes = emis.map(function (e, i) {
+      const h = e.args.empreinte;
+      const annee = new Date(Number(e.args.date) * 1000).getFullYear();
+      return {
+        id: (meta[h] && meta[h].reference) || ("DIP-" + annee + "-" + String(i + 1).padStart(3, "0")),
+        etu: meta[h] && meta[h].etu,
+        dip: meta[h] && meta[h].dip,
+        date: e.args.date,
+        tx: e.transactionHash,
+        hash: h,
+        universite: e.args.universite,
+        revoque: setRevoques.has(h)
+      };
+    }).reverse();
+
+    $("nEmis").textContent = total.toString();
+    $("nRevoques").textContent = revoques.length;
+    $("nActifs").textContent = Math.max(0, Number(total) - revoques.length);
+    $("nStatut").textContent = autorisee ? "Autorisée" : (attente ? "En attente" : "Non autorisée");
+    $("tous").replaceChildren(tableauDiplomes(diplomes));
+    afficherInfos();
+
+    // historique
+    const ops = [];
+    emis.forEach(function (e) { ops.push({ type: "Diplôme émis", detail: "Empreinte : " + e.args.empreinte, bloc: e.blockNumber, tx: e.transactionHash, date: e.args.date }); });
+    revoques.forEach(function (e) { ops.push({ type: "Diplôme révoqué", detail: "Empreinte : " + e.args.empreinte + " - Motif : " + e.args.motif, bloc: e.blockNumber, tx: e.transactionHash, date: e.args.date }); });
+    ops.sort(function (a, b) { return b.bloc - a.bloc; });
+    const boite = $("historique");
+    boite.replaceChildren();
+    ops.slice(0, 100).forEach(function (o) {
+      const l = creer("div", "ligne");
+      l.append(creer("b", "", o.type + " : "), document.createTextNode(dateFr(o.date) + " - " + o.detail + " - Bloc " + o.bloc + " - "));
+      const lien = creer("a", "", "transaction");
+      lien.href = "https://sepolia.etherscan.io/tx/" + o.tx;
+      lien.target = "_blank";
+      lien.rel = "noopener";
+      l.append(lien);
+      boite.append(l);
+    });
+    $("infoHisto").textContent = ops.length + " opération(s) trouvée(s).";
+    message("Données actualisées.", "ok");
+  } catch (e) {
+    $("infoHisto").textContent = "Erreur de lecture.";
+    message("Impossible de charger les données : " + erreur(e) + ". Vérifiez l'adresse du contrat et DEPLOY_BLOCK dans config.js.", "err");
+  }
+}
+
+async function verifierAutorisation() {
+  if (!contract) await connecter();
+  if (!(await contract.universiteAutorisee(moi))) throw Error("Ce wallet doit être autorisé par l'administrateur.");
+}
+
+$("connect").onclick = async function () {
+  try { await connecter(); await actualiser(); } catch (e) { message(erreur(e), "err"); }
+};
+$("actualiser").onclick = function () { actualiser().catch(function (e) { message(erreur(e), "err"); }); };
+
+$("demander").onclick = async function () {
+  try {
+    if (!contract) await connecter();
+    const nom = $("nom").value.trim();
+    if (!nom) throw Error("Écrivez le nom de l'université.");
+    if (await contract.universiteAutorisee(moi)) throw Error("Ce wallet est déjà autorisé.");
+    let attente = false, gere = true;
+    try { attente = await contract.demandeEnAttente(moi); } catch (_) { gere = false; }
+    if (!gere) throw Error("Le contrat déployé ne gère pas les demandes d'inscription : transmettez votre adresse (" + moi + ") à l'administrateur pour qu'il vous autorise.");
+    if (attente) throw Error("Une demande est déjà en attente.");
+    message("Confirmez la transaction dans MetaMask...");
+    const tx = await contract.demanderInscription(nom);
+    message("Transaction envoyée : " + tx.hash);
+    await tx.wait();
+    message("Demande enregistrée. Attendez la validation de l'administrateur.", "ok");
+    await actualiser();
+  } catch (e) { message(erreur(e), "err"); }
+};
+
+function verifierURLApplication() {
+  if (window.location.protocol === "file:" || ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname)) {
+    throw Error("Ouvrez d'abord l'application depuis son URL publique Cloudflare ou un domaine accessible, sinon le QR code ne fonctionnera pas sur le téléphone du recruteur.");
+  }
+}
+
+function cherche(d, noms) {
+  const index = {};
+  Object.keys(d).forEach(function (k) {
+    index[k.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "")] = d[k];
+  });
+  for (let i = 0; i < noms.length; i++) {
+    const v = index[noms[i]];
+    if (v !== undefined && v !== null && String(v).trim()) return String(v).trim();
+  }
+  return "";
+}
+
+function convertirListe(liste) {
+  return liste.map(function (d, index) {
+    if (!d || typeof d !== "object") throw Error("L'entrée " + (index + 1) + " du JSON n'est pas un objet.");
+    let etu = cherche(d, ["etudiant", "nometudiant", "etu", "nomcomplet", "nomprenom", "prenomnom", "fullname", "student", "studentname"]);
+    if (!etu) {
+      const prenom = cherche(d, ["prenom", "prenoms", "firstname"]);
+      const nomF = cherche(d, ["nom", "name", "lastname", "nomdefamille"]);
+      etu = (prenom && nomF) ? prenom + " " + nomF : (nomF || prenom);
+    }
+    const dip = cherche(d, ["intitule", "intituledudiplome", "titre", "dip", "diplome", "nomdiplome", "degree", "title"]);
+    if (!etu || !dip) throw Error("L'entrée " + (index + 1) + " doit contenir au minimum les champs nom et intitule (champs trouvés : " + (Object.keys(d).join(", ") || "aucun") + ").");
+    const fichierReference = cherche(d, ["fichier", "filename", "pdf"]);
+    const referenceDepuisFichier = (fichierReference.match(/DIP-\d{4}-\d+/i) || [""])[0];
+    return {
+      etu: etu,
+      dip: dip,
+      specialite: cherche(d, ["specialite", "parcours", "filiere", "option"]),
+      mention: cherche(d, ["mention"]),
+      dateDelivrance: cherche(d, ["datedelivrance", "date"]) || new Date().toISOString().slice(0, 10),
+      reference: cherche(d, ["reference", "ref"]) || referenceDepuisFichier,
+      numeroSerie: cherche(d, ["numeroserie", "numserie", "serie"]),
+      etablissement: cherche(d, ["etablissement", "universite"]) || "Université de démonstration"
+    };
+  });
+}
+
+["dragover", "drop"].forEach(function (ev) { window.addEventListener(ev, function (e) { e.preventDefault(); }); });
+
+// Extraction automatique à la sélection du PDF. Les éléments sont regroupés par ligne
+// à partir de leur position dans la page : cela conserve mieux la structure du diplôme.
+if (window.pdfjsLib) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+}
+function normaliserTextePDF(texte) {
+  return (texte || "").normalize("NFC").replace(/[\u00a0\t]+/g, " ").replace(/\s+/g, " ").trim();
+}
+async function lireLignesPDF(fichier) {
+  const data = new Uint8Array(await fichier.arrayBuffer());
+  const pdf = await pdfjsLib.getDocument({data}).promise;
+  const lignes = [];
+  for (let pageNo = 1; pageNo <= pdf.numPages; pageNo++) {
+    const page = await pdf.getPage(pageNo);
+    const content = await page.getTextContent();
+    const groupes = [];
+    for (const item of content.items) {
+      if (!item.str || !item.str.trim() || !item.transform) continue;
+      const y = item.transform[5];
+      let groupe = groupes.find(g => Math.abs(g.y - y) < 3.5);
+      if (!groupe) { groupe = {y, items: []}; groupes.push(groupe); }
+      groupe.items.push({x: item.transform[4], texte: item.str});
+    }
+    groupes.sort((a,b) => b.y-a.y);
+    for (const g of groupes) {
+      g.items.sort((a,b) => a.x-b.x);
+      const ligne = normaliserTextePDF(g.items.map(i => i.texte).join(" "));
+      if (ligne) lignes.push(ligne);
+    }
+  }
+  return lignes;
+}
+function extraireInfosDiplome(lignes, nomFichier) {
+  const texte = lignes.join("\n");
+  const trouve = (regex) => {
+    for (const ligne of lignes) {
+      const m = ligne.match(regex);
+      if (m && m[1]) return normaliserTextePDF(m[1]).replace(/[,:;.-]+$/, "");
+    }
+    return "";
+  };
+  // Le nom est généralement placé juste après « Il est certifié que ».
+  let nom = "";
+  const indexCertifie = lignes.findIndex(l => /il\s+est\s+certifi[eé]\s+que/i.test(l));
+  if (indexCertifie >= 0) {
+    for (let i = indexCertifie + 1; i < Math.min(lignes.length, indexCertifie + 5); i++) {
+      const ligne = lignes[i].replace(/\s+/g, " ").trim();
+      if (/^(?:n[eé]\s*\(?e\)?\s+le|a\s+obtenu|avec\s+la\s+mention|simulation|document\s+sans\s+valeur)/i.test(ligne)) continue;
+      const candidat = ligne.match(/^([A-ZÀ-Ý][a-zà-ÿ'’]+(?:[- ][A-ZÀ-Ý]?[a-zà-ÿ'’]+){1,4})/);
+      if (candidat && !/universit[eé]|dipl[oô]me|sp[eé]cialit[eé]/i.test(candidat[1])) { nom = candidat[1].trim(); break; }
+    }
+  }
+  if (!nom) nom = trouve(/(?:nom(?:\s+et\s+pr[eé]nom(?:s)?)?|[eé]tudiant(?:e)?|titulaire|d[eé]livr[eé]e?\s+[aà])\s*[:：-]\s*(.+)/i);
+
+  let intitule = "";
+  const titre = texte.match(/\b(?:DIPL[ÔO]ME\s+DE\s+)?(LICENCE|MASTER|DOCTORAT|BACHELOR|DIPL[ÔO]ME\s+D['’]ING[ÉE]NIEUR)\b/i);
+  if (titre) intitule = titre[1].toUpperCase().replace("BACHELOR", "LICENCE");
+  const reference = trouve(/r[eé]f[eé]rence\s*[:：]\s*([A-Z0-9-]+)/i) || ((nomFichier.match(/DIP-\d{4}-\d+/i) || [""])[0]);
+  const date = trouve(/d[eé]livr[eé]\s+le\s+([0-3]?\d[\/.-][01]?\d[\/.-]\d{4})/i);
+  const specialite = trouve(/sp[eé]cialit[eé]\s*[:：]\s*(.+)/i);
+  const mention = trouve(/mention\s*[«"]?\s*([^»"\n]+)/i);
+  return {nom, intitule, reference, date, specialite, mention, texte};
+}
+async function extraireInfosPDF(fichier) {
+  const status = $("extractionStatus");
+  status.textContent = "Lecture automatique du texte du PDF…";
+  try {
+    if (!window.pdfjsLib) throw Error("La bibliothèque de lecture PDF n'est pas disponible. Vérifiez la connexion Internet.");
+    const lignes = await lireLignesPDF(fichier);
+    if (!lignes.length) {
+      status.textContent = "Aucun texte sélectionnable détecté. Ce PDF semble être une image numérisée : une OCR sera nécessaire.";
+      return;
+    }
+    const info = extraireInfosDiplome(lignes, fichier.name);
+    derniereMetaPDF = {
+      specialite: info.specialite || "",
+      mention: (info.mention || "").replace(/[«»"]/g, "").trim(),
+      dateDelivrance: info.date || new Date().toLocaleDateString("fr-FR"),
+      reference: info.reference || ((fichier.name.match(/DIP-\d{4}-\d+/i) || [""])[0]),
+      etablissement: "Université"
+    };
+    $("pdfNomEtudiant").value = info.nom || "";
+    $("pdfIntitule").value = info.intitule || "";
+    const manquants = [];
+    if (!info.nom) manquants.push("nom de l'étudiant");
+    if (!info.intitule) manquants.push("intitulé du diplôme");
+    const details = [];
+    if (info.reference) details.push("référence " + info.reference);
+    if (info.date) details.push("date " + info.date);
+    if (info.specialite) details.push("spécialité " + info.specialite);
+    if (info.mention) details.push("mention " + info.mention.replace(/[«»"]/g, "").trim());
+    status.textContent = (manquants.length
+      ? "Extraction partielle : " + manquants.join(" et ") + " non reconnu(s), veuillez compléter le champ. "
+      : "Extraction automatique réussie : nom et intitulé détectés. ")
+      + (details.length ? "Informations supplémentaires détectées : " + details.join(" ; ") + ". " : "")
+      + "Vérifiez les champs avant l'émission.";
+  } catch (e) {
+    status.textContent = "Extraction automatique impossible : " + (e.message || String(e)) + ". Complétez les champs manuellement.";
+  }
+}
+$("pdfOfficiel").addEventListener("change", async function () {
+  const fichier = this.files && this.files[0];
+  $("pdfNomEtudiant").value = "";
+  $("pdfIntitule").value = "";
+  if (fichier) await extraireInfosPDF(fichier);
+  else $("extractionStatus").textContent = "Les informations seront extraites automatiquement dès la sélection du PDF.";
+});
+
+$("emettrePDF").onclick = async function () {
+  try {
+    verifierURLApplication();
+    await verifierAutorisation();
+    const fichier = $("pdfOfficiel").files[0];
+    if (!fichier) throw Error("Sélectionnez le PDF officiel de l'université.");
+    if (!fichier.name.toLowerCase().endsWith(".pdf")) throw Error("Le fichier sélectionné doit être un PDF.");
+    const nom = $("pdfNomEtudiant").value.trim();
+    const intitule = $("pdfIntitule").value.trim();
+    if (!nom || !intitule) throw Error("Renseignez le nom de l'étudiant et l'intitulé du diplôme.");
+    message("Calcul de l'empreinte du PDF officiel...");
+    const bytes = await fichier.arrayBuffer();
+    const h = ethers.sha256(new Uint8Array(bytes));
+    const etat = await contract.verifierDiplome(moi, h);
+    if (Boolean(etat[0])) throw Error("Ce PDF est déjà enregistré sur la blockchain.");
+    message("Confirmez l'émission du PDF officiel dans MetaMask...");
+    const tx = await contract.emettreDiplome(h);
+    message("Transaction envoyée : " + tx.hash);
+    await tx.wait();
+    ecrireMeta(h, {etu:nom,dip:intitule,reference:derniereMetaPDF.reference || ((fichier.name.match(/DIP-\d{4}-\d+/i) || [fichier.name])[0]),dateDelivrance:derniereMetaPDF.dateDelivrance || new Date().toLocaleDateString("fr-FR"),specialite:derniereMetaPDF.specialite || "",mention:derniereMetaPDF.mention || "",etablissement:infoUni.nom || "Université"});
+    message("Émission confirmée. Ajout du QR au PDF officiel...");
+    await telechargerPDFOfficielAvecQR(bytes, fichier.name, h, moi);
+    message("Diplôme émis sur Sepolia et PDF avec QR téléchargé. Le hash certifié est celui du PDF original avant insertion du QR.", "ok");
+    $("pdfOfficiel").value = "";
+    await actualiser();
+  } catch(e) { message(erreur(e), "err"); }
+};
+
+const pdfRevocationInput = $("pdfRevocation");
+const pdfRevocationDrop = $("pdfRevocationDrop");
+pdfRevocationInput.addEventListener("change", async function () {
+  const fichier = this.files && this.files[0];
+  $("empreinteRev").value = "";
+  $("revoquer").disabled = true;
+  if (!fichier) {
+    $("pdfRevocationStatus").textContent = "Aucun PDF sélectionné.";
+    return;
+  }
+  if (!fichier.name.toLowerCase().endsWith(".pdf") && fichier.type !== "application/pdf") {
+    this.value = "";
+    $("pdfRevocationStatus").textContent = "Format incorrect : sélectionnez un fichier PDF.";
+    message("Le fichier de révocation doit être un PDF.", "err");
+    return;
+  }
+  try {
+    $("pdfRevocationStatus").textContent = "Calcul de l'empreinte SHA-256 de " + fichier.name + "...";
+    const bytes = await fichier.arrayBuffer();
+    const h = ethers.sha256(new Uint8Array(bytes));
+    $("empreinteRev").value = h;
+    $("pdfRevocationStatus").textContent = "PDF sélectionné : " + fichier.name;
+    $("revoquer").disabled = false;
+    message("Empreinte du PDF calculée. Saisissez le motif puis confirmez la révocation.");
+  } catch (e) {
+    $("pdfRevocationStatus").textContent = "Impossible de calculer l'empreinte du PDF.";
+    message(erreur(e), "err");
+  }
+});
+["dragenter", "dragover"].forEach(function (eventName) {
+  pdfRevocationDrop.addEventListener(eventName, function (event) {
+    event.preventDefault(); event.stopPropagation(); pdfRevocationDrop.classList.add("dragover");
+  });
+});
+["dragleave", "dragend", "drop"].forEach(function (eventName) {
+  pdfRevocationDrop.addEventListener(eventName, function (event) {
+    event.preventDefault(); event.stopPropagation(); pdfRevocationDrop.classList.remove("dragover");
+  });
+});
+pdfRevocationDrop.addEventListener("drop", function (event) {
+  const fichier = Array.from(event.dataTransfer.files || []).find(function (f) {
+    return f.type === "application/pdf" || /\.pdf$/i.test(f.name);
+  });
+  if (!fichier) { message("Déposez un fichier PDF.", "err"); return; }
+  const transfert = new DataTransfer();
+  transfert.items.add(fichier);
+  pdfRevocationInput.files = transfert.files;
+  pdfRevocationInput.dispatchEvent(new Event("change", { bubbles: true }));
+});
+
+$("revoquer").onclick = async function () {
+  try {
+    await verifierAutorisation();
+    const h = $("empreinteRev").value.trim();
+    if (!/^0x[0-9a-fA-F]{64}$/.test(h)) throw Error("Saisissez une empreinte SHA-256 valide (0x suivi de 64 caractères hexadécimaux).");
+    const motif = $("motif").value.trim();
+    if (!motif) throw Error("Écrivez le motif de révocation.");
+    const etat = await contract.verifierDiplome(moi, h);
+    if (!Boolean(etat[0])) throw Error("Aucune certification trouvée pour cette empreinte et ce wallet.");
+    if (Boolean(etat[1])) throw Error("Ce diplôme est déjà révoqué.");
+    message("Confirmez la révocation dans MetaMask...");
+    const tx = await contract.revoquerDiplome(h, motif);
+    message("Transaction envoyée : " + tx.hash);
+    await tx.wait();
+    message("Diplôme révoqué. Empreinte : " + h, "ok");
+    $("empreinteRev").value = ""; $("motif").value = ""; pdfRevocationInput.value = ""; $("pdfRevocationStatus").textContent = "Aucun PDF sélectionné."; $("revoquer").disabled = true;
+    await actualiser();
+  } catch (e) { message(erreur(e), "err"); }
+};
+
+const paramsPage = new URLSearchParams(window.location.search);
+if (paramsPage.get("verifier") === "1" || paramsPage.get("v") === "1") {
+  lancerVerificationPublique();
+}
+
+if (window.ethereum) {
+  ethereum.on("accountsChanged", function () { location.reload(); });
+  ethereum.on("chainChanged", function () { location.reload(); });
+}
+</script>
+</body>
+</html>
