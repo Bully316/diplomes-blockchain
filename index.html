@@ -1,0 +1,1597 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diplômes Blockchain - Campus</title>
+
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.5/dist/ethers.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="config.js"></script>
+
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f3f6fb;color:#263449;font-family:Arial,sans-serif}
+header{background:#193b65;color:white;padding:22px 5%;display:flex;justify-content:space-between;align-items:center}
+header h1{margin:0;font-size:23px}
+header p{margin:7px 0 0;color:#d5e2f0}
+main{max-width:1150px;margin:30px auto;padding:0 15px}
+.tabs{display:flex;flex-wrap:wrap;background:white;border-bottom:1px solid #ddd}
+.tabs button{border:0;background:white;padding:16px 22px;cursor:pointer}
+.tabs button.active{color:#1d5d9b;border-bottom:3px solid #1d5d9b;font-weight:bold}
+.panel{background:white;padding:22px;border-radius:0 0 8px 8px}
+.page[hidden]{display:none}
+.box{border:1px solid #e1e6ed;border-radius:8px;padding:20px;margin-bottom:20px}
+h2{font-size:18px;margin:0 0 15px}
+label{display:block;font-weight:bold;margin:14px 0 7px}
+input{width:100%;padding:12px;border:1px solid #ccd3dc;border-radius:5px}
+button.action{background:#1d5d9b;color:white;border:0;padding:11px 18px;border-radius:5px;margin-top:12px;cursor:pointer}
+button.danger{background:#a83232}
+button:disabled{opacity:.5;cursor:not-allowed}
+.message{padding:13px;background:#f1f4f8;border-left:4px solid #1d5d9b;margin:15px 0;overflow-wrap:anywhere}
+.success{background:#eef9f2;border-color:#16834a}
+.error{background:#fff0f0;border-color:#bd3030}
+.small{font-size:13px;color:#66758a;line-height:1.5}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:15px;margin-bottom:20px}
+.stat{background:white;border:1px solid #e1e6ed;padding:20px;border-radius:8px}
+.stat strong{display:block;font-size:27px;margin-bottom:5px}
+.stat span{font-size:13px;color:#66758a}
+table{width:100%;border-collapse:collapse;margin-top:12px}
+td,th{padding:10px;border:1px solid #e1e6ed;text-align:left;overflow-wrap:anywhere}
+th{background:#f1f4f8;width:35%}
+#tableDiplomes{overflow-x:auto}
+.liste{width:auto;min-width:100%}
+.liste th,.liste td{width:auto;white-space:nowrap;overflow-wrap:normal}
+a{color:#1d5d9b}
+@media(max-width:750px){
+.grid,.stats{grid-template-columns:1fr}
+header{align-items:flex-start;flex-direction:column;gap:12px}
+}
+body.acces-verrouille .page:not(#dashboard) {display:none !important}
+body.acces-verrouille #dashboard {display:block !important}
+#accesRefuse {display:none;background:white;border-left:4px solid #bd3030;padding:22px;margin-bottom:20px;border-radius:8px}
+body:not(.acces-verrouille) #accesRefuse {display:none}
+</style>
+</head>
+
+<body class="acces-verrouille">
+
+<header>
+<div>
+<h1>Diplômes Blockchain</h1>
+<p>Espace de gestion de l'université - Ethereum Sepolia</p>
+</div>
+<button class="action" id="connecter">Connecter MetaMask</button>
+</header>
+
+<main>
+
+<div id="accesRefuse" role="status"><h2>Accès réservé au propriétaire</h2><p>Connectez le portefeuille propriétaire du contrat pour accéder à la gestion des diplômes.</p>
+<table id="diagnosticAcces"><tr><th>Contrat configuré</th><td id="diagContrat">En attente</td></tr><tr><th>Compte connecté</th><td id="diagCompte">En attente</td></tr><tr><th>Portefeuille principal renvoyé par universite()</th><td id="diagPrincipal">En attente</td></tr><tr><th>universiteAutorisee(compte)</th><td id="diagAutorise">En attente</td></tr><tr><th>Compte identique au principal</th><td id="diagIdentique">En attente</td></tr></table></div>
+<nav class="tabs">
+<button class="active" data-page="dashboard">Tableau de bord</button>
+<button data-page="certification">Certification</button>
+<button data-page="liste">Diplômes enregistrés</button>
+</nav>
+
+<section class="panel">
+
+<div id="message" class="message">
+Connectez MetaMask pour accéder à la certification et à la gestion des diplômes.
+</div>
+
+<!-- TABLEAU DE BORD -->
+
+<div class="page" id="dashboard">
+
+<div class="stats">
+<div class="stat">
+<strong id="total">—</strong>
+<span>Diplômes enregistrés</span>
+</div>
+
+<div class="stat">
+<strong id="valides">—</strong>
+<span>Diplômes authentiques</span>
+</div>
+
+<div class="stat">
+<strong id="revoques">—</strong>
+<span>Diplômes révoqués</span>
+</div>
+</div>
+
+<div class="box">
+<h2>Informations du système</h2>
+
+<table>
+<tr><th>Réseau</th><td>Ethereum Sepolia (Chain ID 11155111)</td></tr>
+<tr><th>Université</th><td>Campus</td></tr>
+<tr><th>Contrat intelligent</th><td id="adresseContrat">-</td></tr>
+<tr><th>Portefeuille connecté</th><td id="wallet">Non connecté</td></tr>
+<tr><th>Propriétaire du contrat</th><td id="owner">Non vérifié</td></tr>
+<tr><th>Autorisation</th><td id="autorisation">Non vérifiée</td></tr>
+</table>
+</div>
+
+</div>
+
+<!-- CERTIFICATION -->
+
+<div class="page" id="certification" hidden>
+
+<div class="grid">
+
+<div class="box">
+
+<h2>1. Rechercher un étudiant dans Campus</h2>
+
+<label>Matricule</label>
+<input id="matricule" placeholder="ETU-2026-0002">
+
+<button class="action" id="rechercher">
+Rechercher l'étudiant
+</button>
+
+<div id="resultatRecherche" class="message">
+Aucun étudiant recherché.
+</div>
+
+<div id="ficheEtudiant" hidden>
+<h3>Informations de l'étudiant</h3>
+<table id="detailsEtudiant"></table>
+</div>
+
+</div>
+
+<div class="box">
+
+<h2>2. Importer le diplôme officiel</h2>
+
+<label>Diplôme officiel (PDF)</label>
+<input type="file" id="pdf" accept=".pdf,application/pdf">
+
+<div id="detailsPDF" class="message">
+Recherchez d'abord un étudiant.
+</div>
+
+<button class="action" id="emettre" disabled>
+Certifier le diplôme
+</button>
+
+</div>
+
+</div>
+
+<div class="box">
+
+<h2>3. Révoquer un diplôme</h2>
+
+<label>PDF original du diplôme</label>
+<input type="file" id="pdfRevocation" accept=".pdf,application/pdf">
+
+<label>Empreinte SHA-256</label>
+<input id="hashRevocation" readonly>
+<label for="motifRevocation">Motif de révocation</label>
+<input id="motifRevocation" placeholder="Motif obligatoire" maxlength="500">
+
+<div id="resultatRevocation" class="message">
+Sélectionnez le PDF original.
+</div>
+
+<button class="action danger" id="revoquer" disabled>
+Révoquer le diplôme
+</button>
+
+</div>
+
+</div>
+
+<!-- LISTE -->
+
+<div class="page" id="liste" hidden>
+
+<div class="box">
+<h2>Diplômes enregistrés</h2>
+
+<button class="action" id="actualiser">Actualiser</button>
+
+<div id="tableDiplomes"></div>
+</div>
+
+</div>
+
+</section>
+</main>
+
+<script type="module">
+
+import {createClient} from "https://esm.sh/@supabase/supabase-js@2";
+
+/* =====================================
+   CONFIGURATION SUPABASE
+===================================== */
+
+const SUPABASE_URL =
+"https://arimddpbtznkyexrecvk.supabase.co";
+
+const SUPABASE_KEY =
+"sb_publishable_qyyAnSw0cIxhzqR4JZodHg_JcGAlPlz";
+
+const supabase = createClient(SUPABASE_URL,SUPABASE_KEY);
+
+
+/* =====================================
+   CONFIGURATION BLOCKCHAIN
+===================================== */
+
+const ADDRESS = window.CONFIG?.ADDRESS;
+const ABI = window.CONFIG?.ABI;
+const RPC = window.CONFIG?.RPC_URL ||
+"https://ethereum-sepolia-rpc.publicnode.com";
+
+const CHAIN_ID = "0xaa36a7";
+
+let provider = null;
+let signer = null;
+let contrat = null;
+let lecture = null;
+let portefeuille = null;
+let estProprietaire = false;
+let revocationPrete = false;
+
+let etudiant = null;
+let empreinte = null;
+
+
+/* =====================================
+   OUTILS
+===================================== */
+
+const $ = id => document.getElementById(id);
+
+function afficherMessage(texte,type=""){
+$("message").textContent = texte;
+$("message").className = "message " + type;
+}
+
+function afficherResultat(id,texte,type=""){
+$(id).textContent = texte;
+$(id).className = "message " + type;
+}
+
+function erreur(e){
+return e?.shortMessage || e?.reason || e?.message || String(e);
+}
+
+function normaliser(n){
+return String(n || "").trim().toUpperCase();
+}
+
+/* Texte sans accents, sans espaces ni ponctuation, en majuscules. */
+
+function simplifier(t){
+return String(t || "")
+.normalize("NFD")
+.replace(/[\u0300-\u036f]/g,"")
+.replace(/[^a-zA-Z0-9]/g,"")
+.toUpperCase();
+}
+
+/* Le nom du fichier doit contenir le matricule, ou le nom ET le prénom. */
+
+function fichierCorrespond(nomFichier,e){
+const f = simplifier(nomFichier);
+if(e.matricule && f.includes(simplifier(e.matricule))){
+return true;
+}
+const nom = simplifier(e.nom);
+const prenom = simplifier(String(e.prenom || "").split(/\s+/)[0]);
+return !!nom && !!prenom && f.includes(nom) && f.includes(prenom);
+}
+
+/* true : un PDF sans texte (scan) est accepté après confirmation manuelle.
+   false : il est refusé. */
+
+const AUTORISER_PDF_SCANNE = false;
+
+/* Lit le texte des 3 premières pages, dans le navigateur uniquement. */
+
+async function lireTextePDF(fichier){
+
+if(!window.pdfjsLib){
+throw Error("Lecteur PDF indisponible (connexion à la bibliothèque PDF.js impossible).");
+}
+
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+"https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+const pdf = await pdfjsLib.getDocument({
+data:new Uint8Array(await fichier.arrayBuffer())
+}).promise;
+
+let texte = "";
+
+for(let i = 1; i <= Math.min(pdf.numPages,3); i++){
+const page = await pdf.getPage(i);
+const contenu = await page.getTextContent();
+texte += " " + contenu.items.map(x=>x.str).join(" ");
+}
+
+return texte;
+
+}
+
+/* Le texte doit contenir le matricule, ou le nom ET le prénom. */
+
+function contenuCorrespond(texte,e){
+const t = simplifier(texte);
+if(e.matricule && t.includes(simplifier(e.matricule))){
+return true;
+}
+const nom = simplifier(e.nom);
+const prenom = simplifier(String(e.prenom || "").split(/\s+/)[0]);
+return !!nom && !!prenom && t.includes(nom) && t.includes(prenom);
+}
+
+
+/* =====================================
+   NAVIGATION
+===================================== */
+
+document.querySelectorAll("[data-page]").forEach(btn=>{
+
+btn.addEventListener("click",()=>{
+if(!estProprietaire && btn.dataset.page !== "dashboard")return;
+
+document.querySelectorAll("[data-page]")
+.forEach(b=>b.classList.remove("active"));
+
+btn.classList.add("active");
+
+document.querySelectorAll(".page")
+.forEach(p=>p.hidden=true);
+
+$(btn.dataset.page).hidden=false;
+
+});
+
+});
+
+
+/* =====================================
+   DETERMINATION DU DIPLOME
+===================================== */
+
+function determinerDiplome(niveau){
+
+const correspondances = {
+"L3":"Licence",
+"LICENCE 3":"Licence",
+"M2":"Master",
+"MASTER 2":"Master",
+"D3":"Doctorat",
+"DOCTORAT 3":"Doctorat"
+};
+
+return correspondances[normaliser(niveau)] || null;
+
+}
+
+
+/* =====================================
+   CONNEXION METAMASK
+===================================== */
+
+function actualiserBoutonsAutorises(){
+document.body.classList.toggle("acces-verrouille", !estProprietaire);
+for(const id of ["rechercher","matricule","pdf","pdfRevocation","motifRevocation","actualiser"]){
+$(id).disabled = !estProprietaire;
+}
+document.querySelectorAll("[data-page]").forEach(b=>{
+b.disabled = !estProprietaire && b.dataset.page !== "dashboard";
+});
+$("emettre").disabled = !estProprietaire || !etudiant || !empreinte;
+$("revoquer").disabled = !estProprietaire || !revocationPrete || !$("motifRevocation").value.trim();
+const aide = estProprietaire ? "" : "Connectez le portefeuille propriétaire du contrat.";
+$("emettre").title = aide;
+$("revoquer").title = aide;
+}
+
+async function lireAutorisation(){
+$("diagContrat").textContent = ADDRESS;
+$("diagCompte").textContent = portefeuille;
+$("diagPrincipal").textContent = "Lecture en cours…";
+$("diagAutorise").textContent = "Lecture en cours…";
+$("diagIdentique").textContent = "Lecture en cours…";
+// Lire les deux réponses même si le compte diffère du principal.
+const [principal,autorise] = await Promise.all([
+contrat.universite(),
+contrat.universiteAutorisee(portefeuille)
+]);
+const identique = ethers.getAddress(principal) === ethers.getAddress(portefeuille);
+$("diagPrincipal").textContent = principal;
+$("diagAutorise").textContent = autorise ? "true — autorisé par le contrat" : "false — non autorisé par le contrat";
+$("diagIdentique").textContent = identique ? "Oui" : "Non";
+estProprietaire = identique && autorise === true;
+return principal;
+}
+
+async function verifierProprietaire(){
+// Revérifier le compte, le réseau et le propriétaire avant toute écriture.
+estProprietaire = false;
+actualiserBoutonsAutorises();
+if(!window.ethereum || !contrat){
+throw Error("Connectez le portefeuille propriétaire du contrat.");
+}
+const comptes = await window.ethereum.request({method:"eth_accounts"});
+const reseau = await window.ethereum.request({method:"eth_chainId"});
+if(reseau !== CHAIN_ID || !comptes[0] ||
+comptes[0].toLowerCase() !== portefeuille?.toLowerCase()){
+throw Error("Compte ou réseau modifié. Reconnectez MetaMask.");
+}
+const proprietaire = await lireAutorisation();
+$("owner").textContent = proprietaire;
+$("autorisation").textContent = estProprietaire
+? "Propriétaire autorisé à émettre et révoquer"
+: "Ce portefeuille n’est pas propriétaire";
+$("autorisation").style.color = estProprietaire ? "#16834a" : "#bd3030";
+actualiserBoutonsAutorises();
+if(!estProprietaire){
+throw Error("Action interdite : ce portefeuille n’est pas propriétaire du contrat.");
+}
+}
+
+async function connecter(){
+document.querySelectorAll(".page").forEach(p=>p.hidden=p.id!=="dashboard");
+document.querySelectorAll("[data-page]").forEach(b=>b.classList.toggle("active",b.dataset.page==="dashboard"));
+estProprietaire = false;
+actualiserBoutonsAutorises();
+
+if(!window.ethereum){
+throw Error("MetaMask n'est pas installé.");
+}
+
+if(ADDRESS?.toLowerCase() !== "0x67132637cd8557f972aeee3190887d6e1a7c01e4"){
+throw Error("Mauvais config.js chargé. Adresse attendue : 0x67132637CD8557f972Aeee3190887D6e1A7C01e4. Rechargez avec Ctrl + Maj + R.");
+}
+if(!ADDRESS || !ABI || !Array.isArray(ABI)){
+throw Error("Configuration du contrat invalide. Vérifiez config.js.");
+}
+
+const chain = await window.ethereum.request({
+method:"eth_chainId"
+});
+
+if(chain !== CHAIN_ID){
+
+await window.ethereum.request({
+method:"wallet_switchEthereumChain",
+params:[{chainId:CHAIN_ID}]
+});
+
+}
+
+provider = new ethers.BrowserProvider(window.ethereum);
+
+signer = await provider.getSigner();
+
+portefeuille = await signer.getAddress();
+
+lecture = new ethers.JsonRpcProvider(RPC);
+
+const code = await lecture.getCode(ADDRESS);
+
+if(code === "0x"){
+throw Error("Aucun contrat trouvé à cette adresse sur Sepolia.");
+}
+
+/* Le portefeuille principal est fourni par universite(). */
+
+contrat = new ethers.Contract(ADDRESS,ABI,signer);
+
+const proprietaireContrat = await lireAutorisation();
+$("owner").textContent = proprietaireContrat;
+$("autorisation").textContent = estProprietaire ? "Propriétaire autorisé à émettre et révoquer" : "Ce portefeuille n’est pas propriétaire";
+$("autorisation").style.color = estProprietaire ? "#16834a" : "#bd3030";
+
+$("connecter").textContent =
+portefeuille.slice(0,6)+"..."+portefeuille.slice(-4);
+
+$("wallet").textContent = portefeuille;
+
+$("adresseContrat").textContent = ADDRESS;
+
+actualiserBoutonsAutorises();
+afficherMessage(
+estProprietaire ? "Connexion réussie. Vous pouvez certifier et révoquer."
+: "Accès refusé : ce portefeuille n’est pas autorisé à gérer les diplômes. Connectez le portefeuille principal affiché dans le tableau de bord.",
+estProprietaire ? "success" : "error"
+);
+
+await chargerDiplomes();
+
+}
+
+async function verifierConnexion(){
+
+if(!contrat){
+await connecter();
+}
+
+}
+
+
+/* =====================================
+   RECHERCHE ETUDIANT CAMPUS
+===================================== */
+
+async function rechercherEtudiant(){
+
+try{
+await verifierProprietaire();
+
+const matricule = $("matricule").value.trim();
+
+if(!matricule){
+throw Error("Saisissez un matricule.");
+}
+
+afficherResultat(
+"resultatRecherche",
+"Recherche de l'étudiant dans Campus..."
+);
+
+$("ficheEtudiant").hidden = true;
+$("emettre").disabled = true;
+
+etudiant = null;
+empreinte = null;
+
+$("detailsPDF").textContent =
+"Recherchez d'abord un étudiant.";
+
+const {data,error:err} = await supabase.rpc(
+"rechercher_etudiant_accepte",
+{p_matricule:matricule}
+);
+
+if(err){
+throw Error(err.message);
+}
+
+if(!estProprietaire)return;
+/* Le résultat peut être un tableau ou un objet. */
+
+const e = Array.isArray(data) ? data[0] : data;
+
+if(!e){
+throw Error("Aucun étudiant trouvé dans Campus.");
+}
+
+etudiant = {
+id:e.id,
+matricule:e.matricule,
+nom:e.nom,
+prenom:e.prenom,
+date_naissance:e.date_naissance,
+lieu_naissance:e.lieu_naissance,
+universite:e.universite || "Campus",
+faculte:e.faculte,
+parcours:e.parcours,
+niveau:e.niveau,
+annee:e.annee
+};
+
+const diplome = determinerDiplome(etudiant.niveau);
+
+const informations = [
+["Matricule",etudiant.matricule],
+["Nom",etudiant.nom],
+["Prénom",etudiant.prenom],
+["Date de naissance",etudiant.date_naissance],
+["Lieu de naissance",etudiant.lieu_naissance],
+["Université",etudiant.universite],
+["Faculté",etudiant.faculte],
+["Parcours",etudiant.parcours],
+["Niveau",etudiant.niveau],
+["Année universitaire",etudiant.annee],
+["Intitulé du diplôme",diplome || "Niveau non autorisé"]
+];
+
+const table = $("detailsEtudiant");
+
+table.replaceChildren();
+
+informations.forEach(([nom,valeur])=>{
+
+const tr = document.createElement("tr");
+const th = document.createElement("th");
+const td = document.createElement("td");
+
+th.textContent = nom;
+td.textContent = valeur || "-";
+
+tr.append(th,td);
+table.append(tr);
+
+});
+
+$("ficheEtudiant").hidden = false;
+
+if(!diplome){
+
+afficherResultat(
+"resultatRecherche",
+"Étudiant trouvé, mais son niveau n'est pas éligible.",
+"error"
+);
+
+}else{
+
+afficherResultat(
+"resultatRecherche",
+"Étudiant trouvé. Diplôme déterminé : "+diplome+".",
+"success"
+);
+
+$("detailsPDF").textContent =
+"Vous pouvez maintenant sélectionner le PDF original.";
+
+}
+
+}catch(e){
+
+etudiant = null;
+
+afficherResultat(
+"resultatRecherche",
+erreur(e),
+"error"
+);
+
+}
+
+}
+
+$("rechercher").onclick = rechercherEtudiant;
+
+
+/* =====================================
+   CALCUL SHA-256
+===================================== */
+
+async function calculerHash(fichier){
+
+const buffer = await fichier.arrayBuffer();
+
+const digest = await crypto.subtle.digest(
+"SHA-256",
+buffer
+);
+
+return "0x" +
+Array.from(new Uint8Array(digest))
+.map(b=>b.toString(16).padStart(2,"0"))
+.join("");
+
+}
+
+
+/* =====================================
+   SELECTION DU PDF
+===================================== */
+
+$("pdf").addEventListener("change",async()=>{
+
+try{
+if(!estProprietaire)throw Error("Accès réservé au propriétaire.");
+
+$("emettre").disabled = true;
+empreinte = null;
+
+if(!etudiant){
+throw Error("Recherchez d'abord un étudiant.");
+}
+
+const diplome = determinerDiplome(etudiant.niveau);
+
+if(!diplome){
+throw Error("Niveau non autorisé.");
+}
+
+const fichier = $("pdf").files[0];
+
+if(!fichier){
+return;
+}
+
+if(!fichier.name.toLowerCase().endsWith(".pdf")){
+throw Error("Le fichier doit être un PDF.");
+}
+
+/* Un vrai PDF commence par %PDF- */
+
+const debut = new TextDecoder().decode(
+await fichier.slice(0,5).arrayBuffer()
+);
+
+if(debut !== "%PDF-"){
+throw Error("Ce fichier n'est pas un vrai PDF.");
+}
+
+if(!fichierCorrespond(fichier.name,etudiant)){
+throw Error(
+"Ce fichier ne semble pas appartenir à "+
+etudiant.prenom+" "+etudiant.nom+" ("+etudiant.matricule+"). "+
+"Le nom du fichier doit contenir le matricule, ou le nom et le prénom de l'étudiant."
+);
+}
+
+afficherResultat(
+"detailsPDF",
+"Vérification du contenu du PDF..."
+);
+
+const texte = await lireTextePDF(fichier);
+
+if(simplifier(texte).length < 20){
+
+if(!AUTORISER_PDF_SCANNE){
+throw Error("Ce PDF ne contient pas de texte lisible (scan). Utilisez le PDF numérique original.");
+}
+
+if(!confirm("Ce PDF ne contient pas de texte lisible (scan).\nVérifiez vous-même qu'il s'agit bien du diplôme de "+etudiant.prenom+" "+etudiant.nom+".\n\nContinuer ?")){
+throw Error("Importation annulée.");
+}
+
+}else if(!contenuCorrespond(texte,etudiant)){
+
+throw Error(
+"Le contenu de ce PDF ne mentionne ni le matricule "+etudiant.matricule+
+", ni le nom de "+etudiant.prenom+" "+etudiant.nom+". Ce n'est pas le bon document."
+);
+
+}
+
+afficherResultat(
+"detailsPDF",
+"Calcul de l'empreinte SHA-256..."
+);
+
+/*
+Aucune lecture du contenu textuel du PDF.
+On calcule seulement son empreinte cryptographique.
+*/
+
+empreinte = await calculerHash(fichier);
+
+const table = document.createElement("table");
+
+[
+["Étudiant",etudiant.prenom+" "+etudiant.nom],
+["Matricule",etudiant.matricule],
+["Niveau",etudiant.niveau],
+["Diplôme",diplome],
+["Parcours",etudiant.parcours],
+["Année universitaire",etudiant.annee],
+["Fichier",fichier.name],
+["SHA-256",empreinte]
+
+].forEach(([nom,valeur])=>{
+
+const tr = document.createElement("tr");
+const th = document.createElement("th");
+const td = document.createElement("td");
+
+th.textContent = nom;
+td.textContent = valeur || "-";
+
+tr.append(th,td);
+table.append(tr);
+
+});
+
+$("detailsPDF").replaceChildren(table);
+
+$("detailsPDF").className = "message success";
+
+actualiserBoutonsAutorises();
+
+}catch(e){
+
+empreinte = null;
+
+$("emettre").disabled = true;
+
+afficherResultat(
+"detailsPDF",
+erreur(e),
+"error"
+);
+
+}
+
+});
+
+
+/* =====================================
+   GENERATION PDF AVEC QR CODE
+===================================== */
+
+async function genererPDF(original,hash,nom){
+
+const zone = document.createElement("div");
+
+zone.style.position = "fixed";
+zone.style.left = "-9999px";
+
+document.body.appendChild(zone);
+
+try{
+
+const url = new URL(location.href);
+
+url.search = "";
+url.hash = "";
+
+url.searchParams.set("v","1");
+url.searchParams.set("e",hash);
+
+new QRCode(zone,{
+text:url.toString(),
+width:220,
+height:220
+});
+
+const canvas = zone.querySelector("canvas");
+
+if(!canvas){
+throw Error("Impossible de générer le QR code.");
+}
+
+const pdf = await PDFLib.PDFDocument.load(original);
+
+const page = pdf.getPages()[0];
+
+const image = await pdf.embedPng(
+canvas.toDataURL("image/png")
+);
+
+const tailleQRCode = 80;
+const margeQRCode = 25;
+
+page.drawImage(image,{
+x:page.getWidth()-tailleQRCode-margeQRCode,
+y:page.getHeight()-tailleQRCode-margeQRCode,
+width:tailleQRCode,
+height:tailleQRCode
+});
+
+const fichier = new Blob(
+[await pdf.save()],
+{type:"application/pdf"}
+);
+
+const lien = URL.createObjectURL(fichier);
+
+const a = document.createElement("a");
+
+a.href = lien;
+
+a.download = nom.replace(/\.pdf$/i,"")+"_certifie.pdf";
+
+document.body.appendChild(a);
+
+a.click();
+
+a.remove();
+
+setTimeout(()=>URL.revokeObjectURL(lien),30000);
+
+}finally{
+
+zone.remove();
+
+}
+
+}
+
+
+/* =====================================
+   ENREGISTREMENT SUPABASE
+===================================== */
+
+async function sauvegarderCertification(hash,transaction,diplome){
+
+const {error:err} = await supabase
+.from("certifications")
+.insert({
+
+etudiant_id:etudiant.id,
+nom_universite:etudiant.universite,
+intitule_diplome:diplome,
+matricule:etudiant.matricule,
+empreinte_sha256:hash,
+adresse_emetteur:portefeuille,
+transaction_hash:transaction,
+adresse_contrat:ADDRESS,
+statut:"certifie",
+date_certification:new Date().toISOString()
+
+});
+
+if(err){
+throw Error(
+"La transaction blockchain est confirmée, mais l'enregistrement Supabase a échoué : "+err.message
+);
+}
+
+}
+
+
+/* =====================================
+   EMISSION DU DIPLOME
+===================================== */
+
+$("emettre").onclick = async()=>{
+
+try{
+
+await verifierConnexion();
+await verifierProprietaire();
+
+if(!estProprietaire){
+throw Error("Portefeuille non autorisé : connectez le portefeuille principal actuel du contrat.");
+}
+
+if(!etudiant || !empreinte){
+throw Error("Données incomplètes.");
+}
+
+const diplome = determinerDiplome(etudiant.niveau);
+
+if(!diplome){
+throw Error("Niveau non autorisé.");
+}
+
+const etat = await contrat.diplomes(empreinte);
+
+if(etat.existe){
+throw Error("Ce PDF est déjà enregistré sur la blockchain.");
+}
+
+if(!confirm(
+"Confirmer la certification ?\n\n"+
+"Étudiant : "+etudiant.prenom+" "+etudiant.nom+"\n"+
+"Matricule : "+etudiant.matricule+"\n"+
+"Diplôme : "+diplome+"\n"+
+"Fichier : "+$("pdf").files[0].name+"\n\n"+
+"Cette opération est irréversible sur la blockchain."
+)){
+throw Error("Certification annulée.");
+}
+
+afficherMessage(
+"Vérification des autorisations du contrat..."
+);
+
+/*
+Le staticCall permet de détecter un refus du contrat
+avant de demander la confirmation de la transaction.
+*/
+
+await contrat.emettreDiplome.staticCall(empreinte);
+
+afficherMessage(
+"Veuillez confirmer la transaction dans MetaMask."
+);
+
+const tx = await contrat.emettreDiplome(empreinte);
+
+afficherMessage("Transaction envoyée : "+tx.hash);
+
+const receipt = await tx.wait();
+
+if(receipt.status !== 1){
+throw Error("Transaction échouée.");
+}
+
+await sauvegarderCertification(
+empreinte,
+tx.hash,
+diplome
+);
+
+const fichier = $("pdf").files[0];
+
+await genererPDF(
+await fichier.arrayBuffer(),
+empreinte,
+fichier.name
+);
+
+afficherMessage(
+"Diplôme "+diplome+" certifié avec succès sur Sepolia.",
+"success"
+);
+
+$("pdf").value = "";
+$("emettre").disabled = true;
+
+$("detailsPDF").textContent =
+"Certification terminée.";
+
+empreinte = null;
+
+await chargerDiplomes();
+
+}catch(e){
+
+afficherMessage(
+"Erreur : "+erreur(e),
+"error"
+);
+
+}
+
+};
+
+
+/* =====================================
+   LECTURE DU CONTRAT
+===================================== */
+
+function lectureContract(){
+
+return new ethers.Contract(
+ADDRESS,
+ABI,
+lecture
+);
+
+}
+
+
+/* =====================================
+   PREPARATION REVOCATION
+===================================== */
+
+$("pdfRevocation").addEventListener("change",async()=>{
+
+try{
+if(!estProprietaire)throw Error("Accès réservé au propriétaire.");
+
+revocationPrete = false;
+$("revoquer").disabled = true;
+
+const fichier = $("pdfRevocation").files[0];
+
+if(!fichier){
+return;
+}
+
+const hash = await calculerHash(fichier);
+
+$("hashRevocation").value = hash;
+
+await verifierConnexion();
+
+const etat = await lectureContract().diplomes(hash);
+
+if(!etat.existe){
+throw Error("Diplôme introuvable sur la blockchain.");
+}
+
+if(etat.revoque){
+throw Error("Ce diplôme est déjà révoqué.");
+}
+
+afficherResultat(
+"resultatRevocation",
+"Empreinte reconnue. Révocation possible.",
+"success"
+);
+
+revocationPrete = true;
+actualiserBoutonsAutorises();
+
+}catch(e){
+
+afficherResultat(
+"resultatRevocation",
+erreur(e),
+"error"
+);
+
+}
+
+});
+
+
+/* =====================================
+   REVOCATION
+===================================== */
+
+$("revoquer").onclick = async()=>{
+
+try{
+
+await verifierConnexion();
+await verifierProprietaire();
+
+if(!estProprietaire){
+throw Error("Portefeuille non autorisé : connectez le portefeuille principal actuel du contrat.");
+}
+
+const hash = $("hashRevocation").value;
+
+if(!hash){
+throw Error("Sélectionnez le PDF original.");
+}
+
+const etat = await contrat.diplomes(hash);
+
+if(!etat.existe || etat.revoque){
+throw Error("Diplôme non révocable.");
+}
+
+const motif = $("motifRevocation").value.trim();
+if(!motif)throw Error("Le motif de révocation est obligatoire.");
+await contrat.revoquerDiplome.staticCall(hash,motif);
+
+afficherMessage(
+"Veuillez confirmer la révocation dans MetaMask."
+);
+
+const tx = await contrat.revoquerDiplome(hash,motif);
+
+afficherMessage(
+"Révocation envoyée : "+tx.hash
+);
+
+const receipt = await tx.wait();
+
+if(receipt.status !== 1){
+throw Error("Révocation échouée.");
+}
+
+const {error:err} = await supabase
+.from("certifications")
+.update({
+statut:"revoque",
+date_revocation:new Date().toISOString()
+})
+.eq("empreinte_sha256",hash)
+.eq("adresse_contrat",ADDRESS);
+
+if(err){
+
+afficherMessage(
+"Révoqué sur la blockchain, mais mise à jour Supabase impossible : "+err.message,
+"error"
+);
+
+}else{
+
+afficherMessage(
+"Diplôme révoqué avec succès.",
+"success"
+);
+
+}
+
+$("pdfRevocation").value = "";
+$("hashRevocation").value = "";
+$("motifRevocation").value = "";
+revocationPrete = false;
+$("revoquer").disabled = true;
+
+await chargerDiplomes();
+
+}catch(e){
+
+afficherMessage(
+"Erreur de révocation : "+erreur(e),
+"error"
+);
+
+}
+
+};
+
+
+/* =====================================
+   LISTE ET STATISTIQUES
+===================================== */
+
+async function chargerDiplomes(){
+
+if(!portefeuille || !estProprietaire){
+return;
+}
+
+const {data,error:err} = await supabase
+.from("certifications")
+.select("*")
+.eq("adresse_contrat",ADDRESS)
+.order("date_certification",{ascending:false});
+
+if(err){
+throw Error(err.message);
+}
+
+if(!estProprietaire)return;
+const liste = data || [];
+
+$("total").textContent = liste.length;
+
+$("valides").textContent =
+liste.filter(x=>x.statut==="certifie").length;
+
+$("revoques").textContent =
+liste.filter(x=>x.statut==="revoque").length;
+
+const zone = $("tableDiplomes");
+
+zone.replaceChildren();
+
+if(!liste.length){
+
+zone.textContent = "Aucun diplôme enregistré.";
+
+return;
+
+}
+
+/* Noms des étudiants, récupérés depuis Campus via la fonction existante. */
+
+const noms = {};
+
+await Promise.all(
+[...new Set(liste.map(d=>d.matricule).filter(Boolean))].map(async m=>{
+try{
+const {data:r} = await supabase.rpc(
+"rechercher_etudiant_accepte",
+{p_matricule:m}
+);
+const e = Array.isArray(r) ? r[0] : r;
+if(e){
+noms[m] = (e.prenom||"")+" "+(e.nom||"");
+}
+}catch(_){}
+})
+);
+
+const table = document.createElement("table");
+
+table.className = "liste";
+
+const trh = document.createElement("tr");
+
+[
+"Nom et prénom",
+"Matricule",
+"Intitulé du diplôme",
+"Empreinte SHA-256"
+].forEach(x=>{
+
+const th = document.createElement("th");
+
+th.textContent = x;
+
+trh.append(th);
+
+});
+
+table.append(trh);
+
+liste.forEach(d=>{
+
+const tr = document.createElement("tr");
+
+[
+(noms[d.matricule] || "").trim(),
+d.matricule,
+d.intitule_diplome,
+d.empreinte_sha256
+].forEach(x=>{
+
+const td = document.createElement("td");
+
+td.textContent = x || "-";
+
+tr.append(td);
+
+});
+
+table.append(tr);
+
+});
+
+zone.append(table);
+
+}
+
+$("actualiser").onclick = ()=>
+chargerDiplomes().catch(e=>afficherMessage(erreur(e),"error"));
+
+$("connecter").onclick = ()=>
+connecter().catch(e=>afficherMessage(erreur(e),"error"));
+
+
+/* =====================================
+   CHANGEMENT DE COMPTE METAMASK
+===================================== */
+
+if(window.ethereum){
+
+window.ethereum.on("accountsChanged",()=>{
+etudiant=null;empreinte=null;revocationPrete=false;
+$("detailsEtudiant").replaceChildren();$("tableDiplomes").replaceChildren();
+estProprietaire = false;
+actualiserBoutonsAutorises();
+location.reload();
+});
+
+window.ethereum.on("chainChanged",()=>{
+estProprietaire = false;
+actualiserBoutonsAutorises();
+location.reload();
+});
+
+}
+
+
+/* =====================================
+   VERIFICATION PUBLIQUE PAR QR CODE
+===================================== */
+
+function tableauHistorique(zone, titres, lignes, vide){
+  zone.replaceChildren();
+  if(!lignes.length){zone.textContent=vide;return;}
+  const table=document.createElement("table");table.className="liste";
+  const head=document.createElement("thead"), tr=document.createElement("tr");
+  titres.forEach(t=>{const th=document.createElement("th");th.textContent=t;tr.append(th);});
+  head.append(tr);table.append(head);
+  const body=document.createElement("tbody");
+  lignes.forEach(l=>{const row=document.createElement("tr");l.forEach(v=>{
+    const td=document.createElement("td");td.textContent=v ?? "—";row.append(td);
+  });body.append(row);});table.append(body);zone.append(table);
+}
+function argentCampus(v){
+  return v == null ? "Non renseigné" : Number(v).toLocaleString("fr-FR")+" Ar";
+}
+function dateCampus(v){
+  if(!v)return "—";
+  const d=new Date(v);return Number.isNaN(d.getTime())?"—":d.toLocaleDateString("fr-FR");
+}
+async function chargerHistoriquesCampus(hash){
+  const message=$("historiqueMessage");message.hidden=false;
+  message.className="message";message.textContent="Chargement des historiques Campus…";
+  try{
+    const {data,error}=await supabase.rpc("historique_diplome_public",{
+      p_empreinte:hash,p_contrat:ADDRESS
+    });
+    if(error)throw error;
+    if(!data)throw Error("Aucun dossier Campus associé à cette certification.");
+    const personnel=data.personnel;
+    const fiche=$("informationsPersonnelles");fiche.replaceChildren();
+    if(personnel){
+      const champs=[
+        ["Nom",personnel.nom], ["Prénoms",personnel.prenoms],
+        ["Date de naissance",dateCampus(personnel.naissance)],
+        ["Lieu de naissance",personnel.lieu_naissance],
+        ["Adresse",personnel.adresse], ["E-mail",personnel.email],
+        ["Téléphone",personnel.telephone]
+      ];
+      champs.forEach(([libelle,valeur])=>{
+        const tr=document.createElement("tr"),th=document.createElement("th"),td=document.createElement("td");
+        th.textContent=libelle;td.textContent=valeur == null || valeur === "" ? "Non renseigné" : valeur;
+        tr.append(th,td);fiche.append(tr);
+      });
+    }else{
+      const tr=document.createElement("tr"),td=document.createElement("td");
+      td.textContent="Informations personnelles indisponibles. Exécutez la dernière version de historiques_campus.sql dans Supabase.";
+      tr.append(td);fiche.append(tr);
+    }
+    $("personnelCampus").hidden=false;
+    const notes=data.notes || [], finances=data.finances || [], paiements=data.paiements || [];
+    tableauHistorique($("historiqueAcademique"),
+      ["Année universitaire","Semestre","Matière","Note / 20","Crédits"],
+      notes.map(n=>[n.annee,n.semestre,n.matiere,n.note,n.credits]),
+      "Aucune note enregistrée dans Campus.");
+    tableauHistorique($("resumeFinancier"),
+      ["Année universitaire","Écolage","Total payé","Reste à payer"],
+      finances.map(f=>[f.annee,argentCampus(f.ecolage),argentCampus(f.total_paye),argentCampus(f.reste)]),
+      "Aucun écolage enregistré dans Campus.");
+    tableauHistorique($("historiqueFinancier"),
+      ["Année universitaire","Date du paiement","Montant","Mode","Référence"],
+      paiements.map(p=>[p.annee,dateCampus(p.date_paiement),argentCampus(p.montant),p.mode,p.reference]),
+      "Aucun paiement enregistré dans Campus.");
+    $("historiquesCampus").hidden=false;$("financesCampus").hidden=false;message.hidden=true;
+  }catch(e){
+    message.className="message error";
+    message.textContent="Historiques Campus indisponibles. "+erreur(e)+
+      " Si la fonction historique_diplome_public est absente, exécutez le fichier historiques_campus.sql dans Supabase.";
+  }
+}
+
+async function verificationPublique(){
+
+document.querySelector("main").innerHTML = `
+
+<section class="panel">
+
+<div class="box">
+
+<h2>Vérification d'un diplôme</h2>
+
+<div id="verificationMessage" class="message">
+Vérification en cours...
+</div>
+
+<table id="verificationInfos"></table>
+</div>
+<div class="box" id="personnelCampus" hidden>
+<h2>Informations personnelles</h2>
+<table id="informationsPersonnelles"></table>
+</div>
+<div class="box" id="historiquesCampus" hidden>
+<h2>Historique académique</h2>
+<div id="historiqueAcademique" style="overflow-x:auto"></div>
+</div>
+<div class="box" id="financesCampus" hidden>
+<h2>Historique financier</h2>
+<div id="resumeFinancier" style="overflow-x:auto"></div>
+<div id="historiqueFinancier" style="overflow-x:auto"></div>
+</div>
+<div id="historiqueMessage" class="message" hidden></div>
+<div hidden>
+
+</div>
+
+</section>
+
+`;
+
+try{
+
+const params = new URLSearchParams(location.search);
+
+const hash = params.get("e");
+
+if(!hash || !/^0x[0-9a-fA-F]{64}$/.test(hash)){
+throw Error("Empreinte invalide.");
+}
+
+const rpc = new ethers.JsonRpcProvider(RPC);
+
+const c = new ethers.Contract(ADDRESS,ABI,rpc);
+
+const etat = await c.diplomes(hash);
+
+if(!etat.existe){
+throw Error("Diplôme absent de la blockchain.");
+}
+
+const {data,error:err} = await supabase
+.from("certifications")
+.select("matricule,nom_universite,intitule_diplome,date_certification")
+.eq("empreinte_sha256",hash)
+.eq("adresse_contrat",ADDRESS)
+.limit(1);
+
+const d = data?.[0];
+
+const m = $("verificationMessage");
+
+if(etat.revoque){
+
+m.textContent = "DIPLÔME RÉVOQUÉ";
+
+m.className = "message error";
+
+}else{
+
+m.textContent = "DIPLÔME AUTHENTIQUE";
+
+m.className = "message success";
+
+}
+
+const informations = [
+
+["Université",d?.nom_universite],
+["Matricule",d?.matricule],
+["Diplôme",d?.intitule_diplome],
+[
+"Date de certification",
+d?.date_certification
+?new Date(d.date_certification).toLocaleDateString("fr-FR")
+:"-"
+],
+["Empreinte SHA-256",hash]
+
+];
+
+informations.forEach(([k,v])=>{
+
+const tr = document.createElement("tr");
+
+const th = document.createElement("th");
+
+const td = document.createElement("td");
+
+th.textContent = k;
+
+td.textContent = v || "-";
+
+tr.append(th,td);
+
+$("verificationInfos").append(tr);
+
+});
+
+await chargerHistoriquesCampus(hash);
+if(err && $("historiqueMessage").hidden){
+  $("historiqueMessage").hidden = false;
+  $("historiqueMessage").textContent = "Certaines informations de certification sont indisponibles : " + err.message;
+}
+
+
+}catch(e){
+
+$("verificationMessage").textContent = erreur(e);
+
+$("verificationMessage").className = "message error";
+
+}
+
+}
+
+
+async function chargerInformationsPubliques(){
+$("adresseContrat").textContent = ADDRESS || "Configuration absente";
+$("wallet").textContent = "Non connecté";
+$("autorisation").textContent = "Connexion requise";
+try{
+if(!ethers.isAddress(ADDRESS))throw Error("Adresse du contrat invalide dans config.js.");
+const rpcPublic = new ethers.JsonRpcProvider(RPC);
+try{
+const reseau = await rpcPublic.getNetwork();
+if(reseau.chainId !== 11155111n)throw Error("Le RPC configuré ne correspond pas à Sepolia.");
+const c = new ethers.Contract(ADDRESS,ABI,rpcPublic);
+const principal = await c.universite();
+if(!portefeuille)$("owner").textContent = principal;
+}finally{rpcPublic.destroy();}
+}catch(e){
+if(!portefeuille){
+$("owner").textContent = "Lecture indisponible";
+afficherMessage("Impossible de lire le contrat : "+erreur(e),"error");
+}
+}
+}
+
+/* =====================================
+   DEMARRAGE
+===================================== */
+
+$("motifRevocation").addEventListener("input",actualiserBoutonsAutorises);
+actualiserBoutonsAutorises();
+
+if(new URLSearchParams(location.search).get("v")==="1"){
+
+verificationPublique();
+
+}else{
+chargerInformationsPubliques();
+}
+
+</script>
+
+</body>
+</html>
